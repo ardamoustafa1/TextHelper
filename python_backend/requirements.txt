@@ -1,0 +1,33 @@
+# TextHelper ULTIMATE - Hybrid System Requirements
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+websockets==12.0
+
+# AI ve Transformer Modelleri (Opsiyonel - büyük modeller için)
+# transformers==4.35.0
+# torch==2.1.0
+# sentencepiece==0.1.99
+
+# NLP ve Yazım Düzeltme
+autocorrect==2.6.1
+textdistance==4.6.2
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.23.0
+
+# Cache (Redis - Opsiyonel ama önerilir)
+redis==5.0.1
+hiredis==2.2.3
+
+# Elasticsearch (Opsiyonel - büyük sözlükler için)
+elasticsearch==8.11.0
+
+# Transformer Models (Opsiyonel - AI için)
+# transformers==4.35.0
+# torch==2.1.0
+
+# Diğer
+pydantic==2.5.0
+python-multipart==0.0.6
+numpy==1.24.3

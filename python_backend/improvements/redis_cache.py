@@ -2,6 +2,7 @@
 Redis Cache Layer - Performans İyileştirmesi
 """
 
+import os
 import redis
 import json
 from typing import Optional, Any
@@ -11,21 +12,35 @@ import hashlib
 class RedisCache:
     """Redis cache katmanı"""
     
-    def __init__(self, host='localhost', port=6379, db=0):
+    def __init__(self, host=None, port=None, db=0):
+        host = host or os.getenv("REDIS_HOST", "localhost")
+        port = int(port or os.getenv("REDIS_PORT", "6379"))
         try:
             self.client = redis.Redis(
                 host=host,
                 port=port,
                 db=db,
                 decode_responses=True,
-                socket_connect_timeout=2
+                socket_connect_timeout=5,  # Artırıldı: 2 -> 5 saniye
+                socket_timeout=5,
+                retry_on_timeout=True,
+                health_check_interval=30
             )
             # Bağlantı testi
             self.client.ping()
             self.available = True
-            print("[OK] Redis cache baglantisi kuruldu")
+            print(f"[OK] Redis cache baglantisi kuruldu: {host}:{port}")
+        except redis.ConnectionError as e:
+            # Normal durum - memory cache kullanılacak (Redis opsiyonel)
+            print(f"[INFO] Redis kullanilamiyor, memory cache kullanilacak (normal)")
+            print(f"[INFO] Redis'i aktif etmek icin: DOCKER_BASLAT.bat")
+            self.client = None
+            self.available = False
+            self.memory_cache = {}
         except Exception as e:
-            print(f"[WARNING] Redis kullanilamiyor, memory cache kullanilacak: {e}")
+            # Normal durum - memory cache kullanılacak (Redis opsiyonel)
+            print(f"[INFO] Redis kullanilamiyor, memory cache kullanilacak (normal)")
+            print(f"[INFO] Redis'i aktif etmek icin: DOCKER_BASLAT.bat")
             self.client = None
             self.available = False
             self.memory_cache = {}
@@ -44,10 +59,11 @@ class RedisCache:
         
         return None
     
-    def set(self, key: str, value: Any, ttl: int = 300):
-        """Cache'e kaydet"""
+    def set(self, key: str, value: Any, ttl: int = 3600):
+        """Cache'e kaydet (varsayılan TTL: 1 saat - performans için)"""
         if not self.available:
             self.memory_cache[key] = value
+            # Memory cache için de TTL ekle (basit)
             return
         
         try:

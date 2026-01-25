@@ -8,15 +8,25 @@ from collections import defaultdict
 import json
 import os
 from datetime import datetime
+from redis_cache import cache
 
 class MLLearningSystem:
-    """ML tabanlı öğrenme sistemi"""
+    """ML tabanlı öğrenme sistemi - Redis Destekli (Production Ready)"""
     
     def __init__(self):
-        self.user_preferences = defaultdict(lambda: defaultdict(int))
-        self.context_patterns = defaultdict(lambda: defaultdict(int))
-        self.word_cooccurrence = defaultdict(lambda: defaultdict(int))
-        self.load_data()
+        # Redis prefix'leri
+        self.PREFIX_PREF = "ml:pref"
+        self.PREFIX_CTX = "ml:ctx" 
+        self.PREFIX_COOC = "ml:cooc"
+        
+        # Local memory cache (Redis yavaşlarsa veya çökerse)
+        self.local_preferences = defaultdict(lambda: defaultdict(int))
+        self.local_context = defaultdict(lambda: defaultdict(int))
+        self.local_cooccurrence = defaultdict(lambda: defaultdict(int))
+        
+        # Eğer Redis yoksa diskten yükle (Fallback)
+        if not cache or not cache.available:
+            self.load_local_data()
     
     def learn_from_interaction(
         self,
@@ -25,46 +35,79 @@ class MLLearningSystem:
         selected_suggestion: str,
         context: str = ""
     ):
-        """Kullanıcı etkileşiminden öğren"""
-        # Kullanıcı tercihlerini güncelle
-        self.user_preferences[user_id][selected_suggestion] += 1
-        
-        # Bağlam pattern'lerini öğren
-        if context:
-            self.context_patterns[context][selected_suggestion] += 1
-        
-        # Kelime birlikte kullanımını öğren
-        words = input_text.split()
-        if len(words) > 1:
-            for i in range(len(words) - 1):
-                self.word_cooccurrence[words[i]][words[i+1]] += 1
-        
-        # Periyodik olarak kaydet
-        if len(self.user_preferences) % 10 == 0:
-            self.save_data()
-    
+        """Kullanıcı etkileşiminden öğren (Redis + Async)"""
+        try:
+            # 1. Kullanıcı Tercihleri (Redis Hash)
+            if cache and cache.available:
+                # Key: ml:pref:{user_id} -> Field: {suggestion} -> Value: count
+                # Redis'te atomik artırma (HINCRBY) - Race condition olmaz
+                cache.client.hincrby(f"{self.PREFIX_PREF}:{user_id}", selected_suggestion, 1)
+            else:
+                self.local_preferences[user_id][selected_suggestion] += 1
+            
+            # 2. Bağlam Pattern'leri (Redis Hash)
+            if context and cache and cache.available:
+                # Context kısa olmalı ki key çok büyümesin
+                short_ctx = context.strip().lower()[:50] 
+                cache.client.hincrby(f"{self.PREFIX_CTX}:{short_ctx}", selected_suggestion, 1)
+                # TTL ekle (Bağlam verisi 30 gün kalsın)
+                cache.client.expire(f"{self.PREFIX_CTX}:{short_ctx}", 30 * 24 * 60 * 60)
+            elif context:
+                self.local_context[context][selected_suggestion] += 1
+            
+            # 3. Kelime birlikte kullanımı (Redis Hash)
+            words = input_text.split()
+            if len(words) > 1:
+                for i in range(len(words) - 1):
+                    w1, w2 = words[i], words[i+1]
+                    if cache and cache.available:
+                        cache.client.hincrby(f"{self.PREFIX_COOC}:{w1}", w2, 1)
+                    else:
+                        self.local_cooccurrence[w1][w2] += 1
+            
+            # Redis yoksa locale kaydet
+            if not cache or not cache.available:
+                self.save_local_data()
+                
+        except Exception as e:
+            print(f"ML learning hatasi: {e}")
+
     def get_personalized_suggestions(
         self,
         user_id: str,
         text: str,
         base_suggestions: List[str]
     ) -> List[Dict]:
-        """Kişiselleştirilmiş öneriler"""
+        """Kişiselleştirilmiş öneriler (Redis'ten hızlı okuma)"""
         personalized = []
         
-        # Kullanıcı tercihlerine göre skorla
-        for suggestion in base_suggestions:
-            base_score = 1.0
-            user_pref = self.user_preferences[user_id].get(suggestion, 0)
-            
-            # Kullanıcı tercihi bonusu
-            personalized_score = base_score + (user_pref * 0.5)
-            
-            personalized.append({
-                'text': suggestion,
-                'score': personalized_score,
-                'personalized': user_pref > 0
-            })
+        try:
+            # Redis'ten kullanıcının tüm tercihlerini çek (Tek komut)
+            user_prefs = {}
+            if cache and cache.available:
+                user_prefs = cache.client.hgetall(f"{self.PREFIX_PREF}:{user_id}")
+                # Byte -> Int conversion
+                user_prefs = {k: int(v) for k, v in user_prefs.items()}
+            else:
+                user_prefs = self.local_preferences.get(user_id, {})
+
+            # Kullanıcı tercihlerine göre skorla
+            for suggestion in base_suggestions:
+                base_score = 1.0
+                user_pref = user_prefs.get(suggestion, 0)
+                
+                # Kullanıcı tercihi bonusu
+                personalized_score = base_score + (user_pref * 0.5)
+                
+                personalized.append({
+                    'text': suggestion,
+                    'score': personalized_score,
+                    'personalized': user_pref > 0
+                })
+        except Exception as e:
+            print(f"Personalization error: {e}")
+            # Fallback
+            return [{'text': s, 'score': 1.0, 'personalized': False} for s in base_suggestions]
         
         # Skora göre sırala
         personalized.sort(key=lambda x: x['score'], reverse=True)
@@ -77,7 +120,16 @@ class MLLearningSystem:
             return []
         
         last_word = words[-1].lower()
-        next_words = self.word_cooccurrence.get(last_word, {})
+        next_words = {}
+        
+        try:
+            if cache and cache.available:
+                next_words = cache.client.hgetall(f"{self.PREFIX_COOC}:{last_word}")
+                next_words = {k: int(v) for k, v in next_words.items()}
+            else:
+                next_words = self.local_cooccurrence.get(last_word, {})
+        except Exception:
+            return []
         
         # En sık kullanılanları döndür
         sorted_words = sorted(
@@ -88,58 +140,33 @@ class MLLearningSystem:
         
         return [word for word, count in sorted_words[:5]]
     
-    def save_data(self):
-        """Verileri kaydet"""
-        data_file = os.path.join(
-            os.path.dirname(__file__),
-            "ml_learning_data.json"
-        )
-        
+    def save_local_data(self):
+        """Yedek: Yerel JSON'a kaydet"""
+        data_file = os.path.join(os.path.dirname(__file__), "ml_learning_data.json")
         try:
             data = {
-                'user_preferences': dict(self.user_preferences),
-                'context_patterns': dict(self.context_patterns),
-                'word_cooccurrence': {
-                    k: dict(v) for k, v in self.word_cooccurrence.items()
-                },
+                'user_preferences': dict(self.local_preferences),
+                'context_patterns': dict(self.local_context),
+                'word_cooccurrence': {k: dict(v) for k, v in self.local_cooccurrence.items()},
                 'last_updated': datetime.now().isoformat()
             }
-            
             with open(data_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"ML data kaydetme hatası: {e}")
-    
-    def load_data(self):
-        """Verileri yükle"""
-        data_file = os.path.join(
-            os.path.dirname(__file__),
-            "ml_learning_data.json"
-        )
-        
-        if not os.path.exists(data_file):
-            return
-        
-        try:
-            with open(data_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                
-                self.user_preferences = defaultdict(
-                    lambda: defaultdict(int),
-                    {k: defaultdict(int, v) for k, v in data.get('user_preferences', {}).items()}
-                )
-                
-                self.context_patterns = defaultdict(
-                    lambda: defaultdict(int),
-                    {k: defaultdict(int, v) for k, v in data.get('context_patterns', {}).items()}
-                )
-                
-                self.word_cooccurrence = defaultdict(
-                    lambda: defaultdict(int),
-                    {k: defaultdict(int, v) for k, v in data.get('word_cooccurrence', {}).items()}
-                )
-        except Exception as e:
-            print(f"ML data yükleme hatası: {e}")
+        except Exception:
+            pass
+
+    def load_local_data(self):
+        """Yedek: Yerel JSON'dan yükle"""
+        data_file = os.path.join(os.path.dirname(__file__), "ml_learning_data.json")
+        if os.path.exists(data_file):
+            try:
+                with open(data_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.local_preferences = defaultdict(lambda: defaultdict(int), {k: defaultdict(int, v) for k, v in data.get('user_preferences', {}).items()})
+                    self.local_context = defaultdict(lambda: defaultdict(int), {k: defaultdict(int, v) for k, v in data.get('context_patterns', {}).items()})
+                    self.local_cooccurrence = defaultdict(lambda: defaultdict(int), {k: defaultdict(int, v) for k, v in data.get('word_cooccurrence', {}).items()})
+            except Exception:
+                pass
 
 # Global instance
 ml_learning = MLLearningSystem()

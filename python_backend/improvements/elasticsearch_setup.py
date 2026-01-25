@@ -15,7 +15,12 @@ class ElasticsearchManager:
         self.es_client = None
         self.index_name = "turkish_words"
         self.available = False
-        self.host = os.getenv("ELASTICSEARCH_HOST", "localhost:9200")
+        es_host_raw = os.getenv("ELASTICSEARCH_HOST", "localhost:9200")
+        # URL formatını düzelt (http:// ekle)
+        if not es_host_raw.startswith("http://") and not es_host_raw.startswith("https://"):
+            self.host = f"http://{es_host_raw}"
+        else:
+            self.host = es_host_raw
         
     async def connect(self):
         """Elasticsearch'e bağlan"""
@@ -24,7 +29,8 @@ class ElasticsearchManager:
                 [self.host],
                 request_timeout=30,
                 max_retries=3,
-                retry_on_timeout=True
+                retry_on_timeout=True,
+                maxsize=25  # Connection Pool Size (Default: 10)
             )
             
             # Bağlantı testi
@@ -152,20 +158,19 @@ class ElasticsearchManager:
             print(f"Index'leme hatası: {e}")
             return False
     
-    async def search(self, prefix: str, max_results: int = 10) -> List[Dict]:
+    async def search(self, prefix: str, max_results: int = 200) -> List[Dict]:
         """Prefix ile arama"""
         if not self.es_client or not self.available:
             return []
         
         try:
-            # Completion suggester query
             query = {
                 "suggest": {
                     "word-suggest": {
                         "prefix": prefix.lower(),
                         "completion": {
                             "field": "word_suggest",
-                            "size": max_results,
+                            "size": min(max_results, 250),
                             "fuzzy": {
                                 "fuzziness": 1
                             }

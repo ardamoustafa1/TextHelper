@@ -175,7 +175,7 @@
             textHelper = initTextHelperUltimate({
                 apiUrl: API_URL,
                 wsUrl: WS_URL,
-                maxSuggestions: 7,
+                maxSuggestions: 50,  // Artırıldı: 7 -> 50
                 useWebSocket: true
             });
             
@@ -200,6 +200,7 @@
             });
             
             // Character count
+            // WHATSAPP BENZERİ: Her karakter için anlık öneri (input event - her karakter değişikliğinde)
             input.addEventListener('input', () => {
                 const length = input.value.length;
                 document.getElementById('charCount').textContent = `${length} / 2000`;

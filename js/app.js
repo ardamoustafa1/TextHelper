@@ -1,4 +1,4 @@
-/**
+man/**
  * TextHelper - Ana Uygulama
  * WhatsApp/VS Code tarzı akıllı otomatik tamamlama sistemi
  */

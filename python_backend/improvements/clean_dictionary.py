@@ -1,141 +1,220 @@
 """
-Sözlük Temizleme Scripti
-- Anlamsız test kelimelerini temizler
-- Sadece gerçek Türkçe kelimeleri tutar
+Sözlük Temizleme Scripti (Gelişmiş Versiyon)
+- Büyük/Küçük Ünlü Uyumu kurallarını uygular
+- Fonotaktik (ses dizimi) kurallarını uygular
+- Anlamsız permütasyonları ve sfaa, abadayıcu gibi kelimeleri temizler.
 """
 
-import json
 import os
 import re
-from typing import List, Set
 
-def is_valid_turkish_word(word: str) -> bool:
-    """Kelime geçerli Türkçe kelime mi kontrol et"""
-    if not word or len(word.strip()) == 0:
-        return False
+def is_vowel(char):
+    return char in "aeıioöuü"
+
+def is_consonant(char):
+    return char in "bcçdfgğhjklmnprsştvyz"
+
+def follows_major_harmony(word):
+    """Büyük Ünlü Uyumu: Kalınlık-İncelik"""
+    vowels = [c for c in word if is_vowel(c)]
+    if not vowels: return True # Sesli harf yoksa kural aranmaz (örn: spor - gerçi bu sözlükte olmamalı ama neyse)
     
-    word_lower = word.lower().strip()
-    
-    # 1. Anlamsız pattern'leri filtrele
-    invalid_patterns = [
-        r'abcdefg',  # Test kelimeleri
-        r'abcdefgh',
-        r'abcdefghi',
-        r'qwerty',  # Klavye pattern'leri
-        r'asdfgh',
-        r'^[a-z]{1,2}$',  # Çok kısa anlamsız kombinasyonlar (a, ab, ac gibi - ama "ü" gibi tek harfli gerçek kelimeleri tut)
-    ]
-    
-    for pattern in invalid_patterns:
-        if re.search(pattern, word_lower):
+    first_is_front = vowels[0] in "eiöü"
+    for v in vowels[1:]:
+        current_is_front = v in "eiöü"
+        if first_is_front != current_is_front:
+            # İstisnalar (anne, kardeş, elma vb.) - Ama permütasyonlarda bu kural katı uygulanmalı
+            # Bu script anlamsız permütasyonları temizlemek için olduğu için katı modda çalıştıracağız.
+            # Ancak bazı yaygın kelimeler istisna olabilir.
+            # Şimdilik sadece çok bariz anlamsızlıkları elemek için %100 uygulayalım.
             return False
-    
-    # 2. Sadece Türkçe karakterler içermeli
-    if not re.match(r'^[a-zçğıöşüA-ZÇĞIİÖŞÜ\s\-]+$', word):
-        return False
-    
-    # 3. Çok uzun kelimeler (muhtemelen hata)
-    if len(word) > 30:
-        return False
-    
-    # 4. Tekrarlayan karakterler (aaa, bbb gibi)
-    if re.match(r'^(.)\1{3,}$', word_lower):  # 4+ aynı karakter
-        return False
-    
-    # 5. Sadece rakam veya özel karakter
-    if re.match(r'^[0-9\W]+$', word):
-        return False
-    
     return True
 
-def clean_dictionary(input_file: str = "turkish_dictionary.json", output_file: str = "turkish_dictionary.json"):
-    """Sözlüğü temizle"""
-    dict_file = os.path.join(os.path.dirname(__file__), input_file)
+
+# Büyük Ünlü Uyumu istisnaları (Yaygın kullanılanlar)
+DISHARMONIC_EXCEPTIONS = {
+    "anne", "kardeş", "hangi", "hani", "elma", "şişman", "insan", "kitap", "kalem", "sabah",
+    "fiyat", "ziyaret", "ticaret", "siyaset", "dakika", "hareket", "hakikat", "emanet", 
+    "cesaret", "adalet", "ibadet", "kıyamet", "ganimet", "hikaye", "harita", "tarih",
+    "tarif", "talih", "nasip", "sahip", "ahenk", "badem", "civar", "fidan", "gazete",
+    "haber", "kader", "kahve", "taze", "meyve", "model", "bobin", "vites", "vagon",
+    "ciğer", "limon", "pilot", "bira", "israf", "itiraf", "iftira", "ilham", "imha",
+    "imkan", "inanç", "inkar", "insaf", "iptal", "isyan", "işgal", "ithal", "izan",
+    "cami", "mani", "vali", "dahi", "kuzey", "güney", "tayin", "tahmin", "takvim",
+    "tasvir", "tatil", "teklif", "teslim", "teşvik", "cisim", "çeşit", "mevsim",
+    "sahil", "şehir", "mühim", "onur", "horoz", "konsol", "atlet", "metal", "torun",
+    "topu", "kontrol", "alkol", "petrol", "futbol", "koro", "horon", "piyon", "bilyon",
+    "kamyon", "lider", "final", "moral", "sistem", "program", "roket"
+}
+
+def check_last_transition_harmony(word):
+    """
+    Son iki sesli arasındaki uyumu kontrol eder.
+    Sözlükteki 'root+suffix' hatalarını (örn: abadayı-ci) yakalamak için en etkili yöntemdir.
+    """
+    vowels = [c for c in word if is_vowel(c)]
+    if len(vowels) < 2: return True
     
-    if not os.path.exists(dict_file):
-        print(f"[HATA] Dosya bulunamadi: {dict_file}")
-        return
+    last_vowel = vowels[-1]
+    prev_vowel = vowels[-2]
     
-    print("=" * 60)
-    print("SOZLUK TEMIZLENIYOR...")
-    print("=" * 60)
-    print()
-    
-    # Mevcut sözlüğü yükle
-    try:
-        with open(dict_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            words = data.get('words', [])
-            frequencies = data.get('frequencies', {})
-            categories = data.get('categories', {})
+    # İstisna Ekler Kontrolü
+    if word.endswith(("yor", "ken", "ki", "gil", "mtırak")):
+        return True
         
-        print(f"[INFO] Mevcut kelime sayisi: {len(words):,}")
-    except Exception as e:
-        print(f"[HATA] Sözlük yüklenemedi: {e}")
+    # İstisna Kelimeler Kontrolü (Tam eşleşme veya kök eşleşmesi)
+    if word in DISHARMONIC_EXCEPTIONS:
+        return True
+    
+    # Bazı yaygın istisna köklerin türevlerini korumak için (örn: kitap -> kitapçı)
+    # Eğer kelimenin kökü istisna listesindeyse ve son ek uyumluysa geçer.
+    # Ancak burada basitçe son geçişe bakıyoruz. 'kitapçı' (a-ı) zaten uyumludur.
+    # 'kitap' (i-a) uyumsuzdur, whitelist ile geçer.
+    # 'kitapci' (a-i) uyumsuzdur, whitelist'te YOKTUR (kitap var, kitapci yok). REDDEDİLİR.
+    # Bu mantık tam olarak istediğimiz şey!
+    
+    # Kalınlık-İncelik (Major Harmony)
+    prev_is_front = prev_vowel in "eiöü"
+    last_is_front = last_vowel in "eiöü"
+    
+    if prev_is_front != last_is_front:
+        return False
+        
+    return True
+
+def follows_major_harmony(word):
+    """Büyük Ünlü Uyumu: Kalınlık-İncelik (Tüm kelime için)"""
+    vowels = [c for c in word if is_vowel(c)]
+    if not vowels: return True 
+    
+    first_is_front = vowels[0] in "eiöü"
+    for v in vowels[1:]:
+        current_is_front = v in "eiöü"
+        if first_is_front != current_is_front:
+            return False
+    return True
+
+def follows_minor_harmony(word):
+    """Küçük Ünlü Uyumu: Düzlük-Yuvarlaklık"""
+    vowels = [c for c in word if is_vowel(c)]
+    if len(vowels) < 2: return True
+    
+    for i in range(len(vowels) - 1):
+        v1 = vowels[i]
+        v2 = vowels[i+1]
+        
+        # 1. Düzden sonra düz gelir (a,e,ı,i -> a,e,ı,i)
+        if v1 in "aeıi":
+            if v2 not in "aeıi":
+                # İstisna: Şimdiki zaman eki -yor
+                if v2 == 'o' and (word.endswith('yor') or 'yor' in word): continue
+                return False
+        
+        # 2. Yuvarlaktan sonra ya düz-geniş (a,e) ya da yuvarlak-dar (u,ü) gelir
+        if v1 in "oöuü":
+            if v2 not in "aeuü":
+                # İstisna: -yor
+                if v2 == 'o' and (word.endswith('yor') or 'yor' in word): continue
+                return False
+    return True
+
+def has_valid_phonotactics(word):
+    """Ses Dizimi Kuralları"""
+    
+    # 1. Türkçe kelimeler (genellikle) iki sessizle başlamaz
+    if len(word) > 2 and is_consonant(word[0]) and is_consonant(word[1]):
+        allowed_starts = ["br", "tr", "kr", "sp", "st", "pr", "pl", "fl", "fr", "kl", "gr", "sm", "sk", "dr", "ch", "sh", "bl", "gl"]
+        if not any(word.startswith(start) for start in allowed_starts):
+           return False
+
+    # 1.5. Aynı sesliyle başlama (aa, ee vs.)
+    if len(word) > 2 and is_vowel(word[0]) and word[0] == word[1]:
+        if word.startswith("aa") and not word.startswith("aaron"): 
+             return False
+
+    # 2. Üç sessiz yan yana gelmez
+    if re.search(r'[bcçdfgğhjklmnprsştvyz]{3,}', word):
+        allowed_clusters = ["ktr", "str", "nks", "rktr", "nst", "mstr", "ktr"]
+        if not any(c in word for c in allowed_clusters):
+             return False
+
+    # 3. İkiden fazla aynı harf yan yana gelmez
+    if re.search(r'(.)\1\1', word):
+        return False
+        
+    return True
+
+def is_valid_turkish_word(word):
+    word = word.lower().strip()
+    
+    # Çok kısa kelimeler için whitelist
+    if len(word) < 2: return False
+    if len(word) == 2:
+        allowed_2 = ["ab", "aç", "ad", "af", "ağ", "ah", "ak", "al", "an", "as", "aş", "at", "av", "ay", "az",
+                     "bu", "şu", "o", "un", "su", "iş", "iz", "il", "in", "it", "of", "oh", "ol", "on", "ot", "oy",
+                     "öl", "ön", "öz", "re", "se", "ta", "te", "ti", "us", "uz", "un", "ya", "ye", "ve"]
+        return word in allowed_2
+
+    # Karakter kontrolü
+    if not re.match(r'^[a-zçğıöşü]+$', word):
+        return False
+
+    # 1. Fonotaktik Kontrol
+    if not has_valid_phonotactics(word):
+        return False
+
+    # 2. Ünlü Uyumu Kontrolleri (DAHA DA GÜNCELLENDİ)
+    # Strateji: 
+    # - Küçük Ünlü Uyumu: KATIDIR. (sadece -yor ve bazı loanwordler hariç).
+    # - Büyük Ünlü Uyumu: SADECE SON GEÇİŞ KONTROLÜ ile Hatalı Ekleri Yakala!
+    
+    if not follows_minor_harmony(word):
+        if word not in DISHARMONIC_EXCEPTIONS:
+             return False
+
+    # SON GEÇİŞ KONTROLÜ (abadayı-ci temizliği için)
+    # Eğer kelime istisna listesinde değilse, son sesli geçişi MUTLAKA uyumlu olmalı.
+    if not check_last_transition_harmony(word):
+         return False
+
+    return True
+
+def clean_dictionary():
+    # txt dosyasını hedef alıyoruz
+    input_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "turkish_dictionary.txt")
+    
+    if not os.path.exists(input_file):
+        print(f"Hata: {input_file} bulunamadı.")
         return
+
+    print("Sözlük okunuyor...")
+    with open(input_file, 'r', encoding='utf-8') as f:
+        words = f.read().splitlines()
+
+    print(f"Toplam kelime: {len(words)}")
     
-    # Kelimeleri temizle
     cleaned_words = []
-    removed_words = []
+    removed_count = 0
     
+    # İlerlemeyi görmek için
     for word in words:
+        word = word.strip()
+        if not word: continue
+        
         if is_valid_turkish_word(word):
             cleaned_words.append(word)
         else:
-            removed_words.append(word)
-            # Frekans ve kategori'den de sil
-            word_lower = word.lower()
-            frequencies.pop(word_lower, None)
-            categories.pop(word_lower, None)
+            removed_count += 1
+            if removed_count < 20:
+                print(f"Silinen: {word}")
+
+    print(f"\nİşlem tamamlandı.")
+    print(f"Kalan kelime: {len(cleaned_words)}")
+    print(f"Silinen kelime: {removed_count}")
     
-    print(f"[OK] Temizlenen kelime sayisi: {len(cleaned_words):,}")
-    print(f"[OK] Silinen kelime sayisi: {len(removed_words):,}")
-    
-    if removed_words:
-        print()
-        print("[INFO] Silinen örnek kelimeler:")
-        for word in removed_words[:20]:  # İlk 20 örnek
-            print(f"  - {word}")
-        if len(removed_words) > 20:
-            print(f"  ... ve {len(removed_words) - 20} kelime daha")
-    
-    # Frekansları güncelle (sadece temiz kelimeler için)
-    cleaned_frequencies = {}
-    cleaned_categories = {}
-    
-    for word in cleaned_words:
-        word_lower = word.lower()
-        if word_lower in frequencies:
-            cleaned_frequencies[word_lower] = frequencies[word_lower]
-        if word_lower in categories:
-            cleaned_categories[word_lower] = categories[word_lower]
-    
-    # Kaydet
-    output_path = os.path.join(os.path.dirname(__file__), output_file)
-    data = {
-        'words': cleaned_words,
-        'frequencies': cleaned_frequencies,
-        'categories': cleaned_categories,
-        'total_count': len(cleaned_words),
-        'version': '4.1',
-        'generated_at': '2026-01-23',
-        'cleaned': True,
-        'removed_count': len(removed_words)
-    }
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    print()
-    print("=" * 60)
-    print("TAMAMLANDI!")
-    print("=" * 60)
-    print(f"[OK] Temiz sözlük kaydedildi: {len(cleaned_words):,} kelime")
-    print(f"[OK] Dosya: {output_path}")
-    print()
-    print("Şimdi gerçek kelimeleri eklemek için:")
-    print("KELIME_OTOMATIK_INDIR.bat → Çift tıklayın")
-    print("=" * 60)
+    # Dosyayı güncelle
+    with open(input_file, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(cleaned_words))
 
 if __name__ == "__main__":
     clean_dictionary()

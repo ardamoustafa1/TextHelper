@@ -311,16 +311,16 @@ class TextHelperUltimate {
      */
     async fetchSuggestions(text) {
         try {
-            const response = await fetch(`${this.config.apiUrl}/predict`, {
+            // New Enterprise API Endpoint
+            const response = await fetch(`${this.config.apiUrl}/api/v1/process`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     text: text,
-                    max_suggestions: this.config.maxSuggestions,
-                    use_ai: true,
-                    use_search: true
+                    // Context awareness for better predictions
+                    context: this.getContextFromLastMessage()
                 })
             });
 

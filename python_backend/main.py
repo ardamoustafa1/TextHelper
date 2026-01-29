@@ -312,9 +312,9 @@ async def lifespan(app: FastAPI):
         logger.info("Production mode icin: PRODUCTION_BASLAT.bat kullanin")
     logger.info("=" * 70)
     logger.info("[OK] Sistem hazir!")
-    logger.info("API Docs: http://localhost:8000/docs")
-    logger.info("WebSocket: ws://localhost:8000/ws")
-    logger.info("Health: http://localhost:8000/health")
+    logger.info("API Docs: http://localhost:8080/docs")
+    logger.info("WebSocket: ws://localhost:8080/api/v1/ws")
+    logger.info("Health: http://localhost:8080/api/v1/health")
     logger.info(f"REDIS_PORT: {os.getenv('REDIS_PORT', '6379')}")
     logger.info("YENI OZELLIKLER:")
     
@@ -2124,7 +2124,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=is_dev  # Sadece geliştirme modunda aç
     )
 

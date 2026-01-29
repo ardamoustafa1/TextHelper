@@ -50,7 +50,7 @@ PRODUCTION_BASLAT.bat → Çift tıklayın
 
 ### 3. Test
 ```
-http://localhost:8000/docs
+http://localhost:8080/docs
 ```
 
 ---
@@ -83,14 +83,12 @@ http://localhost:8000/docs
 
 ### REST API
 ```bash
-curl -X POST "http://localhost:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "fatura sorgulama", "max_suggestions": 10}'
+curl -X POST "http://localhost:8080/api/v1/process" -H "Content-Type: application/json" -d "{\"text\": \"fatura sorgulama\"}"
 ```
 
 ### WebSocket
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/ws');
+const ws = new WebSocket('ws://localhost:8080/api/v1/ws');
 ws.send(JSON.stringify({ text: 'merhaba nasıl yardımcı olabilirsiniz' }));
 ```
 
@@ -161,12 +159,12 @@ Sistem şu özelliklerle müşteri hizmetleri entegrasyonu için hazır:
 
 3. **API Test:**
    ```
-   http://localhost:8000/docs
+   http://localhost:8080/docs
    ```
 
 4. **Health Check:**
    ```
-   http://localhost:8000/health
+   http://localhost:8080/api/v1/health
    ```
 
 ---
@@ -181,7 +179,7 @@ Sistem şu özelliklerle müşteri hizmetleri entegrasyonu için hazır:
 ### Adımlar
 1. `KELIME_TOPLA.bat` çalıştır (1M+ kelime)
 2. `PRODUCTION_BASLAT.bat` çalıştır
-3. API test et: `http://localhost:8000/docs`
+3. API test et: `http://localhost:8080/docs`
 4. Entegrasyon yap (herhangi bir telekom şirketi için - marka-agnostic)
 
 ---

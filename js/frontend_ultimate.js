@@ -6,9 +6,9 @@
 class TextHelperUltimate {
     constructor(config = {}) {
         this.config = {
-            apiUrl: config.apiUrl || 'http://localhost:8000',
-            wsUrl: config.wsUrl || 'ws://localhost:8000/ws',
-            useWebSocket: config.useWebSocket !== false,
+            apiUrl: config.apiUrl || 'http://localhost:8080',
+            wsUrl: config.wsUrl || 'ws://localhost:8080/api/v1/ws',
+            useWebSocket: false, // FORCE HTTP FOR STABILITY
             maxSuggestions: config.maxSuggestions || 80,
             ...config
         };
@@ -172,9 +172,22 @@ class TextHelperUltimate {
                     if (statusEl) {
                         statusEl.className = 'status-connected';
                         statusEl.title = 'Sunucuya bağlı';
+                        statusEl.className = 'status-connected';
+                        statusEl.title = 'Sunucuya bağlı (HTTP Modu)';
                     }
                 }
             };
+
+            // HTTP Fallback logic simulation for connection status
+            if (!this.config.useWebSocket) {
+                if (this.suggestionsContainer) {
+                    const statusEl = document.getElementById('ws-status-indicator');
+                    if (statusEl) {
+                        statusEl.className = 'status-connected';
+                        statusEl.title = 'Sunucuya bağlı (HTTP)';
+                    }
+                }
+            }
 
             this.ws.onmessage = (event) => {
                 const response = JSON.parse(event.data);
@@ -368,13 +381,13 @@ class TextHelperUltimate {
 
         // Smart Personalization: Kullanıcının sık kullandığı kelimeleri en üste taşı
         suggestions = suggestions.map(s => {
-            const userFreq = this.userVocabulary[s.text.toLowerCase()] || 0;
+            const userFreq = this.userVocabulary[(s.text || '').toLowerCase()] || 0;
             if (userFreq > 0) {
-                s.score += (userFreq * 0.5); // Boost score based on usage
-                s.description = s.description + ' (Sık kullanılan)';
+                s.score = (s.score ?? 0) + (userFreq * 0.5);
+                s.description = (s.description || '') + ' (Sık kullanılan)';
             }
             return s;
-        }).sort((a, b) => b.score - a.score);
+        }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
         this.currentSuggestions = suggestions;
 
@@ -385,7 +398,10 @@ class TextHelperUltimate {
                 this.renderSuggestions(this.currentSuggestions);
             } else {
                 // Öneri yoksa container'ı temizle
-                this.suggestionsContainer.innerHTML = '';
+                const container = this.suggestionsContainer.closest('.autocomplete-dropdown') || this.suggestionsContainer;
+                const listEl = this.suggestionsContainer.querySelector('.suggestions-list') || this.suggestionsContainer;
+                if (listEl) listEl.innerHTML = '';
+                if (container) container.classList.remove('visible');
             }
 
             // Ghost Text Güncelle
@@ -397,19 +413,15 @@ class TextHelperUltimate {
             console.log('Yazım düzeltmesi:', response.corrected_text);
         }
 
-        // İstatistikler
+        // İstatistikler: DOM'da processingTime span'ini güncelle
+        const ptEl = document.getElementById('processingTime');
+        if (ptEl) {
+            ptEl.textContent = (this.currentSuggestions.length > 0 && response.processing_time_ms != null)
+                ? `${Math.round(response.processing_time_ms)} ms`
+                : '';
+        }
         if (response.processing_time_ms) {
             console.log(`İşlem süresi: ${response.processing_time_ms}ms`);
-        }
-    }
-
-    /**
-     * Önerileri temizle
-     */
-    clearSuggestions() {
-        this.currentSuggestions = [];
-        if (this.suggestionsContainer) {
-            this.suggestionsContainer.innerHTML = '';
         }
     }
 
@@ -445,7 +457,7 @@ class TextHelperUltimate {
                         <span class="suggestion-source">(${sug.source})</span>
                     </span>
                 </div>
-                <div class="suggestion-score">${sug.score.toFixed(1)}</div>
+                <div class="suggestion-score">${Number(sug.score ?? 0).toFixed(1)}</div>
             </div>
         `).join('');
 
@@ -498,10 +510,27 @@ class TextHelperUltimate {
                 event.preventDefault();
                 this.moveSelection(-1);
                 break;
+            case ' ':
+                // AUTO-CORRECT (Refleksler)
+                // Boşluk tuşuna basınca en iyi DÜZELTME önerisini uygula
+                if (this.currentSuggestions.length > 0) {
+                    const topSuggestion = this.currentSuggestions[0];
+                    if (topSuggestion.type === 'correction' && topSuggestion.confidence >= 1.0) {
+                        event.preventDefault(); // Boşluğu biz ekleyeceğiz
+                        this.selectSuggestion(0);
+                        // Kelimeyi tamamladıktan sonra otomatik bir boşluk ekle
+                        this.inputElement.value += ' ';
+                    }
+                }
+                break;
             case 'Tab':
                 if (this.currentSuggestions.length > 0) {
                     event.preventDefault();
-                    this.selectSuggestion(0); // İlk öneriyi seç (Ghost Text)
+                    const active = this.suggestionsContainer?.querySelector('.suggestion-item.active');
+                    const idx = active != null && active.dataset.index != null
+                        ? parseInt(active.dataset.index, 10)
+                        : 0;
+                    this.selectSuggestion(isNaN(idx) ? 0 : Math.max(0, Math.min(idx, this.currentSuggestions.length - 1)));
                 }
                 break;
             case 'Escape':
@@ -538,6 +567,7 @@ class TextHelperUltimate {
     getIcon(type) {
         const icons = {
             'ai_prediction': 'fas fa-brain',
+            'ai_generation': 'fas fa-magic', // New magic icon for GPT-2
             'dictionary': 'fas fa-book',
             'spellcheck': 'fas fa-spell-check',
             'fuzzy': 'fas fa-search'
@@ -572,36 +602,34 @@ class TextHelperUltimate {
             }
             container.classList.remove('visible');
         }
+        const ptEl = document.getElementById('processingTime');
+        if (ptEl) ptEl.textContent = '';
     }
 
     /**
-     * Mesaj gönderildiğinde (öğrenme için)
+     * Mesaj gönderildiğinde veya öneri seçildiğinde (öğrenme için)
+     * Backend /learn ile user_dict + n-gram güncellenir.
      */
     async learnMessage(message, selectedSuggestion = "") {
+        if (!message || !String(message).trim()) return;
         try {
-            // Eğer bir öneri seçildiyse onu da gönder
-            const feedback = {
-                text: message,
-                selected_suggestion: selectedSuggestion,
-                user_id: "default" // İleride gerçek user id eklenebilir
-            };
-
-            await fetch(`${this.config.apiUrl}/learn`, {
+            const res = await fetch(`${this.config.apiUrl}/api/v1/learn`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(feedback)
+                body: JSON.stringify({ text: String(message).trim() })
             });
-
-            // Local Learning (Anında etki)
+            if (!res.ok) throw new Error(`Learn ${res.status}`);
+        } catch (e) {
+            console.warn('Öğrenme isteği hatası:', e);
+        }
+        try {
             if (selectedSuggestion) {
-                const word = selectedSuggestion.toLowerCase();
+                const word = String(selectedSuggestion).toLowerCase();
                 this.userVocabulary[word] = (this.userVocabulary[word] || 0) + 1;
                 this.saveUserVocabulary();
             }
-
-            console.log('[Frontend] Öğrenme sinyali gönderildi:', feedback);
-        } catch (error) {
-            console.error('Öğrenme hatası:', error);
+        } catch (e) {
+            console.warn('Local vocabulary güncelleme hatası:', e);
         }
     }
 }

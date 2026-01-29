@@ -72,7 +72,7 @@ PRODUCTION_BASLAT.bat → Çift tıklayın
 
 ### Adım 3: Test
 ```
-http://localhost:8000/docs
+http://localhost:8080/docs
 ```
 
 ---

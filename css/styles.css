@@ -651,7 +651,7 @@ body {
     transform: translateY(10px) scale(0.98);
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     /* Spring animation */
-    z-index: 100;
+    z-index: 99999;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     overflow: hidden;
@@ -661,6 +661,8 @@ body {
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
+    display: block !important;
+    /* Force display */
 }
 
 .dropdown-header {

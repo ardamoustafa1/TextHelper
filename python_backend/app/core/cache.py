@@ -48,9 +48,7 @@ class CacheManager:
             except Exception:
                 return None
         else:
-            # Memory Check (Simple LRU-like)
             return self.memory_cache.get(key)
-        return None
 
     def set(self, key: str, value: Any, ttl: int = 3600):
         if self.use_redis:

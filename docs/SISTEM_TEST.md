@@ -9,34 +9,28 @@ BASLAT.bat → Çift tıklayın
 
 ### 2. API Test (Tarayıcı)
 ```
-http://localhost:8000/docs
+http://localhost:8080/docs
 ```
 
 ### 3. Test Senaryoları
 
 #### Senaryo 1: Tek Harf
 ```bash
-curl -X POST "http://localhost:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "a", "max_suggestions": 10}'
+curl -X POST "http://localhost:8080/api/v1/process" -H "Content-Type: application/json" -d "{\"text\": \"a\"}"
 ```
 
-**Beklenen:** 10+ öneri (a ile başlayan kelimeler)
+**Beklenen:** Öneri listesi (a ile başlayan kelimeler)
 
 #### Senaryo 2: Kelime
 ```bash
-curl -X POST "http://localhost:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "merhaba", "max_suggestions": 10}'
+curl -X POST "http://localhost:8080/api/v1/process" -H "Content-Type: application/json" -d "{\"text\": \"merhaba\"}"
 ```
 
-**Beklenen:** 10+ öneri (merhaba ile ilgili)
+**Beklenen:** Öneri listesi (merhaba ile ilgili)
 
 #### Senaryo 3: Cümle
 ```bash
-curl -X POST "http://localhost:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "merhaba nasıl", "max_suggestions": 10}'
+curl -X POST "http://localhost:8080/api/v1/process" -H "Content-Type: application/json" -d "{\"text\": \"merhaba nasıl\"}"
 ```
 
 **Beklenen:** 10+ öneri (nasıl ile devam eden)
@@ -54,7 +48,7 @@ curl -X POST "http://localhost:8000/predict" \
 
 2. **Health check:**
    ```
-   http://localhost:8000/health
+   http://localhost:8080/api/v1/health
    ```
 
 3. **Manuel test:**
@@ -67,8 +61,8 @@ curl -X POST "http://localhost:8000/predict" \
 
 Eğer öneri yoksa:
 1. Backend'i yeniden başlat: `BASLAT.bat`
-2. Health check yap: `http://localhost:8000/health`
-3. API docs'tan test et: `http://localhost:8000/docs`
+2. Health check yap: `http://localhost:8080/api/v1/health`
+3. API docs'tan test et: `http://localhost:8080/docs`
 
 ---
 

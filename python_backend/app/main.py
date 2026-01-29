@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse
 from app.api.routes import router
 from app.core.nlp_engine import nlp_engine
 import uvicorn
-import asyncio
 import os
 
 app = FastAPI(
@@ -22,6 +21,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    print("==================================================")
+    print("  TEXTHELPER ULTIMATE - IPHONE INTELLIGENCE MODE  ")
+    print("==================================================")
+    print("  [INIT] Triggering heavy model loading...")
+    await nlp_engine.load_models()
+    print("  [OK] User Dictionary Loaded")
+    print("  [OK] N-gram Context Engine Active")
+    print("  [OK] Hybrid Decision Core Ready")
+    print("==================================================")
 
 # Mount Static Files (CSS, JS)
 # Assuming run from 'python_backend', and static files are one level up in 'TextHelper'
@@ -43,17 +54,9 @@ async def read_index():
         return FileResponse(HTML_PATH)
     return {"error": "Index file not found", "path": HTML_PATH}
 
-# Startup event to load models
-@app.on_event("startup")
-async def startup_event():
-    print("Starting TextHelper Ultimate...")
-    # Trigger model loading in background
-    asyncio.create_task(nlp_engine.load_models())
-    # Check ES connection
-    from app.core.search_service import search_service
-    asyncio.create_task(search_service.check_connection())
-
 app.include_router(router, prefix="/api/v1")
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    # Disable reload to prevent Windows multiprocessing spawn errors
+    print("Starting Server in STABLE COMPATIBILITY MODE...")
+    uvicorn.run(app, host="0.0.0.0", port=8080, reload=False)

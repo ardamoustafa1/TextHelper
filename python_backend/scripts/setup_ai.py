@@ -92,7 +92,30 @@ def setup_transformers():
     except Exception as e:
         print(f"Error checking models: {e}")
 
+def setup_gpt2():
+    """
+    Downloads Turkish GPT-2 Model for text generation.
+    """
+    print("\n--- Setting up GenAI Model (GPT-2) ---")
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        # A good, lightweight Turkish GPT-2 model
+        model_name = "redrussianarmy/gpt2-turkish-cased"
+        
+        print(f"Loading/Downloading {model_name}...")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        
+        target_dir = MODELS_DIR / "gpt2_tr"
+        model.save_pretrained(target_dir)
+        tokenizer.save_pretrained(target_dir)
+        print("GPT-2 Model saved locally.")
+        
+    except Exception as e:
+        print(f"Error downloading GPT-2: {e}")
+
 if __name__ == "__main__":
     setup_frequencies()
-    setup_transformers()
+    setup_transformers() # BERT (still useful for filling masks)
+    setup_gpt2()         # GPT-2 (New!)
     print("\n[OK] Setup Complete!")

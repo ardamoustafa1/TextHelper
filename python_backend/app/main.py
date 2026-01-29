@@ -1,19 +1,89 @@
+import sys
+import os
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from app.api.routes import router
-from app.core.nlp_engine import nlp_engine
 import uvicorn
-import os
+
+# Path setup to support legacy modules
+# Path setup
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+
+# Removed legacy 'improvements' path hack in favor of app.features package
+
+
+from app.core.config import settings
+from app.core.logs import logger
+from app.core.security import api_key_middleware
+from app.core.exceptions import global_exception_handler
+from app.routers import prediction, learning, websocket, system
+from app.services.ai import transformer_predictor
+from app.services.search import elasticsearch_predictor
+try:
+    from app.features.trie_index import trie_index
+    TRIE_AVAILABLE = True
+except ImportError:
+    TRIE_AVAILABLE = False
+    trie_index = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP ---
+    logger.info("Sistem baslatiliyor...")
+    
+    # 1. Transformer Model (Lazy Load)
+    try:
+        if settings.USE_TRANSFORMER:
+            logger.info("Transformer modeli yukleniyor (arka planda)...")
+            asyncio.create_task(transformer_predictor.load_model())
+    except Exception as e:
+        logger.warning(f"Transformer model baslatma hatasi: {e}")
+        
+    # 2. Elasticsearch ve Dictionary
+    try:
+        await elasticsearch_predictor.connect_elasticsearch()
+        # Local dictionary load (if not loaded)
+        elasticsearch_predictor._load_dictionary()
+    except Exception as e:
+        logger.warning(f"Elasticsearch baslatma hatasi: {e}")
+        
+    # 3. Trie Index (Ultra fast search)
+    if TRIE_AVAILABLE and trie_index:
+        try:
+            logger.info("Trie Index olusturuluyor...")
+            dict_source = elasticsearch_predictor.local_dictionary
+            if dict_source:
+                # Run in thread/background to avoid blocking
+                await asyncio.to_thread(trie_index.build_index, dict_source)
+                logger.info(f"Trie Index hazir ({trie_index.word_count} kelime)")
+        except Exception as e:
+            logger.warning(f"Trie index hatasi: {e}")
+
+    logger.info("Sistem hazir!")
+    
+    yield
+    
+    # --- SHUTDOWN ---
+    logger.info("Sistem kapatiliyor...")
+    if elasticsearch_predictor.es_client:
+        try:
+            close_res = elasticsearch_predictor.es_client.close()
+            # If async client
+            if hasattr(close_res, '__await__'):
+                await close_res
+        except Exception as e:
+            logger.warning(f"ES close warning: {e}")
 
 app = FastAPI(
-    title="TextHelper Ultimate API",
-    description="Enterprise-grade NLP backend for TextHelper",
-    version="2.0.0"
+    title="TextHelper ULTIMATE API",
+    version="2.1.0",
+    description="Hybrid AI Text Completion API",
+    lifespan=lifespan
 )
 
-# CORS - Allow all
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,41 +92,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    print("==================================================")
-    print("  TEXTHELPER ULTIMATE - IPHONE INTELLIGENCE MODE  ")
-    print("==================================================")
-    print("  [INIT] Triggering heavy model loading...")
-    await nlp_engine.load_models()
-    print("  [OK] User Dictionary Loaded")
-    print("  [OK] N-gram Context Engine Active")
-    print("  [OK] Hybrid Decision Core Ready")
-    print("==================================================")
+# Security Middleware (Manually added since Starlette middleware wrapper handles imports better here)
+from starlette.middleware.base import BaseHTTPMiddleware
+app.add_middleware(BaseHTTPMiddleware, dispatch=api_key_middleware)
 
-# Mount Static Files (CSS, JS)
-# Assuming run from 'python_backend', and static files are one level up in 'TextHelper'
-# We need to serve the parent directory accurately.
-# BASE_DIR = c:\Users\ARDA\OneDrive\Masaüstü\TextHelper
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # python_backend
-ROOT_DIR = os.path.dirname(BASE_DIR) # TextHelper
+# Exception Handlers
+app.add_exception_handler(Exception, global_exception_handler)
 
-print(f"[DEBUG] ROOT_DIR: {ROOT_DIR}")
-HTML_PATH = os.path.join(ROOT_DIR, "index_ultimate.html")
-print(f"[DEBUG] HTML_PATH: {HTML_PATH}")
+# Routers
+app.include_router(system.router)
+app.include_router(prediction.router, tags=["prediction"])
+app.include_router(learning.router, tags=["learning"])
+app.include_router(websocket.router, tags=["realtime"])
 
-app.mount("/css", StaticFiles(directory=os.path.join(ROOT_DIR, "css")), name="css")
-app.mount("/js", StaticFiles(directory=os.path.join(ROOT_DIR, "js")), name="js")
-
-@app.get("/")
-async def read_index():
-    if os.path.exists(HTML_PATH):
-        return FileResponse(HTML_PATH)
-    return {"error": "Index file not found", "path": HTML_PATH}
-
-app.include_router(router, prefix="/api/v1")
+# V1 Prefix Backward Compatibility
+app.include_router(prediction.router, prefix="/api/v1", tags=["v1"])
+app.include_router(learning.router, prefix="/api/v1", tags=["v1"])
+app.include_router(system.router, prefix="/api/v1", tags=["v1"])
+app.include_router(websocket.router, prefix="/api/v1", tags=["v1"]) # Fix for frontend
 
 if __name__ == "__main__":
-    # Disable reload to prevent Windows multiprocessing spawn errors
-    print("Starting Server in STABLE COMPATIBILITY MODE...")
-    uvicorn.run(app, host="0.0.0.0", port=8080, reload=False)
+    is_dev = os.getenv("DEV_MODE", "false").lower() == "true"
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8080,
+        reload=is_dev
+    )

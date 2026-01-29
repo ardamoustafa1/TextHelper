@@ -90,8 +90,6 @@ class SecurityManager:
         text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.IGNORECASE | re.DOTALL)
         # JavaScript events kaldır
         text = re.sub(r'on\w+\s*=\s*["\'][^"\']*["\']', '', text, flags=re.IGNORECASE)
-        # Trim
-        text = text.strip()
         return text
     
     def check_api_key(self, api_key: Optional[str]) -> bool:

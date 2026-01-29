@@ -18,6 +18,7 @@ class TextHelperUltimate {
         this.suggestionsContainer = null;
         this.ghostOverlay = null; // Ghost Text için overlay
         this.currentSuggestions = [];
+        this._lastWsRequestText = null; // WebSocket phase: enhanced sadece aynı input için uygulansın
 
         // Zero-Latency Cache
         this.cache = new Map();
@@ -139,7 +140,7 @@ class TextHelperUltimate {
         const words = text.split(' ');
         const lastWord = words[words.length - 1];
 
-        if (suggestion.toLowerCase().startsWith(lastWord.toLowerCase()) && lastWord.length > 0) {
+        if (suggestion.toLowerCase().startsWith(lastWord.toLowerCase())) {
             const completion = suggestion.substring(lastWord.length);
             // Ana metin (görünmez) + Ghost Text (gri)
             this.ghostOverlay.innerHTML = text.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
@@ -241,10 +242,16 @@ class TextHelperUltimate {
         const chatContainer = document.getElementById('messagesContainer');
         if (!chatContainer) return "";
 
-        const incomingMessages = chatContainer.querySelectorAll('.message.incoming .message-text');
-        if (incomingMessages.length === 0) return "";
+        let messages = chatContainer.querySelectorAll('.message.incoming .message-text');
+        if (messages.length === 0) {
+            messages = chatContainer.querySelectorAll('.message.outgoing .message-text');
+        }
+        if (messages.length === 0) {
+            messages = chatContainer.querySelectorAll('.message .message-text');
+        }
+        if (messages.length === 0) return "";
 
-        const lastMessage = incomingMessages[incomingMessages.length - 1].textContent;
+        const lastMessage = messages[messages.length - 1].textContent;
         return lastMessage;
     }
 
@@ -301,6 +308,7 @@ class TextHelperUltimate {
             const contextMsg = this.getContextFromLastMessage();
 
             if (this.config.useWebSocket && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this._lastWsRequestText = text;
                 this.ws.send(JSON.stringify({
                     text: text, // Boş olabilir
                     context_message: contextMsg, // YENİ: Önceki mesaj
@@ -366,18 +374,19 @@ class TextHelperUltimate {
      * Önerileri işle ve göster
      */
     handleSuggestions(response) {
-        // Cache'e kaydet (Input text'i response içinde yok, bu yüzden cache key'i tam bulamayabiliriz 
-        // ama handleInput'ta text ile çağırıyoruz. Buraya text parametresi eklemek ideal olurdu ama
-        // state üzerinden de gidebiliriz veya response'u genişletebiliriz.
-        // Basitçe, eğer bu bir response ise ve suggestions varsa, son input değeri için cache'leyelim)
+        // WebSocket iki aşamalı: enhanced sadece hâlâ aynı input için geçerliyse uygula (eski enhanced yeni fast'ı ezmesin)
+        if (response.phase === 'enhanced' && this._lastWsRequestText !== undefined && this.inputElement && this.inputElement.value !== this._lastWsRequestText) {
+            return;
+        }
 
-        if (this.inputElement && response.suggestions.length > 0) {
+        // Cache'e kaydet
+        if (this.inputElement && response.suggestions && response.suggestions.length > 0) {
             const currentInput = this.inputElement.value;
             // Sadece son kelime için cache yapmak daha mantıklı olabilir ama şimdilik tam text
             this.addToCache(currentInput, response);
         }
 
-        let suggestions = response.suggestions || [];
+        let suggestions = (response.suggestions || []).slice();
 
         // Smart Personalization: Kullanıcının sık kullandığı kelimeleri en üste taşı
         suggestions = suggestions.map(s => {
@@ -481,8 +490,16 @@ class TextHelperUltimate {
         if (this.inputElement) {
             const currentText = this.inputElement.value;
             const words = currentText.split(' ');
-            words[words.length - 1] = suggestion.text;
+            // Eger son kelime boslursa (yani bosluktan sonra) ve biz yeni kelime seciyorsak
+            if (words[words.length - 1] === '' && words.length > 1) {
+                words[words.length - 1] = suggestion.text;
+            } else {
+                words[words.length - 1] = suggestion.text;
+            }
             this.inputElement.value = words.join(' ');
+            if (!this.inputElement.value.endsWith(' ')) {
+                this.inputElement.value += ' '; // Kolaylık için bir boşluk daha ekle
+            }
 
             // Input event tetikle
             this.inputElement.dispatchEvent(new Event('input', { bubbles: true }));

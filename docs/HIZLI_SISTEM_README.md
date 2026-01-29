@@ -5,17 +5,17 @@
 ### ✅ Yapılan Değişiklikler:
 
 1. **Timeout: 5s → 0.1s** (50x daha hızlı)
-2. **Sadece Trie + Large Dictionary** kullan (diğerleri devre dışı)
+2. **Trie + Large Dictionary** – **FastAPI pipeline'da aktif**: `app/core/trie_engine.py` (prefix O(prefix)), sözlük merge ile büyük sözlük kullanılıyor.
 3. **Frontend debouncing: 50ms** (her karakter için değil)
-4. **Arama limitleri optimize edildi** (daha az kelime, daha hızlı)
+4. **Arama limitleri optimize edildi** (Trie ile linear scan yok)
 
 ### ✅ HYBRID YAKLAŞIM: Tüm Özellikler Aktif (İki Aşamalı Sistem)
 
-**AŞAMA 1: Hızlı Öneriler (20-50ms)** - Önce gösterilir:
-- ✅ **Trie Index** (ultra hızlı - milisaniyelik)
-- ✅ **Large Dictionary** (hızlı - milisaniyelik)
+**AŞAMA 1: Hızlı Öneriler (20-50ms)** – Önce gösterilir (WebSocket `phase: "fast"`):
+- ✅ **Trie Index** (`app/core/trie_engine.py` – ultra hızlı, O(prefix))
+- ✅ **Large Dictionary** (frequency_dict + merge: tr_frequencies, turkish_dictionary, turkish_large, improvements)
 
-**AŞAMA 2: Akıllı Öneriler (Arka Planda)** - Hızlı önerilerden sonra gelir:
+**AŞAMA 2: Akıllı Öneriler (Arka Planda)** – Hızlı önerilerden sonra gelir (WebSocket `phase: "enhanced"`):
 - ✅ **N-gram** (arka planda - 500ms timeout)
 - ✅ **Phrase Completion** (arka planda - 500ms timeout)
 - ✅ **Context Analysis** (arka planda - hafif)

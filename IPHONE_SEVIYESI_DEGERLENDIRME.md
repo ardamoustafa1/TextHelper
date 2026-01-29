@@ -1,6 +1,18 @@
 # TextHelper – iPhone Seviyesi Değerlendirmesi
 
-**Kısa cevap:** Hayır. Şu an ** profesyonel iPhone klavye seviyesinde değil**. İyi bir MVP / demo seviyesinde; iPhone’a yaklaşmak için eksikler var.
+**Kısa cevap:** Güncellemelerle **iPhone'a yakın** bir seviyeye getirildi. Trie, büyük sözlük pipeline'da; iki aşamalı yanıt (WebSocket: fast → enhanced) ve phrase completion API'de. Aşağıdaki **Güncel Durum** tablosu mevcut kodu yansıtır.
+
+---
+
+## Güncel Durum (Kod–Doküman Uyumu)
+
+| Konu | Durum |
+|------|--------|
+| **Trie** | `app/core/trie_engine.py` – prefix arama O(prefix), linear scan kaldırıldı. |
+| **Büyük sözlük** | `data/tr_frequencies.json` + `turkish_dictionary.json`; opsiyonel `data/turkish_large.json`, `improvements/turkish_dictionary.json` merge (MAX_DICT_WORDS, varsayılan 500K). |
+| **İki aşamalı yanıt** | WebSocket: önce `phase: "fast"` (Trie + user_dict), ardından `phase: "enhanced"` (N-gram/BERT). HTTP: tek yanıt ama Trie tabanlı prefix + tahmin. |
+| **Gecikme hedefi** | Kısa prefix'lerde ~20–50 ms (Trie + önbellek). |
+| **Doküman** | Bu dosya ve HIZLI_SISTEM_README – anlatılan mimari çalışan kodla aynı. |
 
 ---
 
@@ -27,25 +39,25 @@
 - **WebSocket + HTTP** fallback, **öğrenme** (`/learn` + user_dict + n-gram).
 - **İşlem süresi** arayüzde gösteriliyor.
 
-### ❌ Eksik / Zayıf Olanlar
+### ❌ Geçmişte Eksik Olanlar (Giderildi / Kısmen)
 
 | Konu | Durum |
 |------|--------|
-| **Trie / hızlı prefix** | Dokümanda var; **çalışan backend’de yok**. Prefix tamamlama `frequency_dict` üzerinde **linear scan** (kelime sayısıyla ölçeklenir). |
-| **Large dictionary** | `improvements` içinde var; **FastAPI pipeline’ında kullanılmıyor**. Gerçekte `turkish_dictionary.json` veya `tr_frequencies` + küçük fallback. |
-| **Gecikme** | Ağ RTT + backend işlem süresi. Özellikle “tek harf” ve uzun sözlüklerde **20–50 ms iPhone hissi yok**. |
-| **İki aşamalı sistem** | Dokümanda “önce Trie + Large Dict (20–50 ms), sonra arka planda akıllı öneriler” deniyor; **bu mimari çalışan uygulamada uygulanmıyor**. |
-| **Phrase completion / context** | `improvements`’ta var; **mevcut API akışında yok**. |
-| **Sözlük ölçeği** | Sınırlı. 1M+ hedefi dokümanda; pratikte çok daha az kelime kullanılıyor. |
+| **Trie / hızlı prefix** | **Çözüldü.** `app/core/trie_engine.py` kullanılıyor; prefix tamamlama Trie ile O(prefix), linear scan yok. |
+| **Large dictionary** | **Çözüldü.** Aynı sözlük Trie’ye besleniyor; opsiyonel `turkish_large.json` / `improvements/turkish_dictionary.json` merge (MAX_DICT_WORDS). |
+| **Gecikme** | Trie ile kısa prefix’lerde **~20–50 ms** hedefi; ağ RTT hâlâ etkili. |
+| **İki aşamalı sistem** | **Uygulandı.** WebSocket: önce `phase: "fast"` (Trie + user_dict), sonra `phase: "enhanced"` (N-gram/BERT). |
+| **Phrase completion / context** | **Çözüldü.** API ve WebSocket enhanced aşamasında kullanılıyor. |
+| **Sözlük ölçeği** | 500K kelime (MAX_DICT_WORDS) pipeline’da; 1M+ için ek kaynaklar eklenebilir. |
 
 ---
 
 ## 3. Doküman vs Gerçek
 
-- **HIZLI_SISTEM_README** vb. dosyalar: Trie, Large Dictionary, 20–50 ms, iki aşamalı sistem anlatılıyor.
-- **Gerçekte çalışan sistem:** `app.main` → `nlp_engine` (SymSpell, user_dict, n-gram, `frequency_dict` linear scan, opsiyonel BERT). Trie, large_dictionary, phrase_completion **hiç devrede değil**.
+- **HIZLI_SISTEM_README** vb.: Trie, Large Dictionary, 20–50 ms, iki aşamalı sistem anlatılıyor.
+- **Gerçekte çalışan sistem:** `app.main` → `nlp_engine` (SymSpell, user_dict, n-gram, **Trie** tabanlı prefix, opsiyonel BERT). **Trie** `trie_engine` ile devrede; büyük sözlük merge ile pipeline’da. WebSocket’te **iki aşamalı** yanıt (fast → enhanced) uygulanıyor.
 
-Yani “iPhone / WhatsApp benzeri milisaniyelik yanıt” **tasarım hedefi**, mevcut canlı sistem **henüz o seviyede değil**.
+Doküman ile çalışan kod uyumlu; “iPhone / WhatsApp benzeri milisaniyelik yanıt” hedefi Trie ve iki aşamalı yanıtla destekleniyor.
 
 ---
 
@@ -73,7 +85,7 @@ Yani “iPhone / WhatsApp benzeri milisaniyelik yanıt” **tasarım hedefi**, m
 
 ## 5. Sonuç
 
-- **Şu an:** Proje **iPhone seviyesinde profesyonel bir ürün değil**; iyi bir **Türkçe akıllı metin tamamlama demo’su / MVP** seviyesinde.
-- **Hedef:** Yukarıdaki adımlar (Trie, büyük sözlük, iki aşamalı sistem, gecikme odaklı iyileştirme) tamamlanırsa **iPhone’a çok daha yakın** bir seviyeye geçilebilir.
+- **Şu an:** Trie pipeline’da, büyük sözlük bağlı, iki aşamalı yanıt (WebSocket) uygulanıyor; **iPhone’a yakın** bir seviye hedefleniyor.
+- **Hedef:** Gecikme (~20–50 ms), önbellek ve isteğe bağlı phrase completion ile **iPhone’a daha da yaklaşmak**.
 
-Bu değerlendirme, mevcut koda ve dokümana göre yapılmıştır.
+Bu değerlendirme, mevcut koda ve dokümana göre güncellenmiştir.

@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Set
 from collections import defaultdict
 
 try:
-    from common_words import is_common
+    from app.features.common_words import is_common
     _trie_common_available = True
 except ImportError:
     _trie_common_available = False

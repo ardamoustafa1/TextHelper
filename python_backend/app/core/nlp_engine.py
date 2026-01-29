@@ -12,6 +12,7 @@ import zeyrek
 
 from app.core.user_dict import UserDictionary
 from app.core.ngram_engine import NgramEngine
+from app.core.trie_engine import TrieEngine
 from logger_config import logger
 
 class NLPEngine:
@@ -41,7 +42,8 @@ class NLPEngine:
         
         self.tokenizer = None
         self.model = None
-        self.frequency_dict = {} # Initialize empty to avoid race conditions
+        self.frequency_dict = {}  # word -> frequency
+        self.trie_engine: Optional[TrieEngine] = None  # O(prefix) arama, iPhone hissi
         
         # Initialize Personalization Engines
         try:
@@ -117,11 +119,42 @@ class NLPEngine:
                     print(f"Fallback dictionary error: {e}")
 
             if data:
-                self.frequency_dict = data
+                self.frequency_dict = dict(data)
+            else:
+                data = {}
+
+            # Large dictionary: merge ek kaynaklar (1M+ hedef, pipeline'a bağlı)
+            max_words = int(os.getenv("MAX_DICT_WORDS", "500000"))
+            large_paths = [
+                self.data_dir / "turkish_large.json",
+                self.base_dir / "improvements" / "turkish_dictionary.json",
+            ]
+            for large_path in large_paths:
+                if large_path.exists() and len(self.frequency_dict) < max_words:
+                    try:
+                        with open(large_path, "r", encoding="utf-8") as f:
+                            raw = json.load(f)
+                        if isinstance(raw, dict) and "words" in raw:
+                            raw = raw["words"]
+                        if isinstance(raw, dict) and not any(isinstance(v, (list, dict)) for v in (list(raw.values())[:3] or [])):
+                            extra = raw
+                        else:
+                            extra = {x["word"]: x.get("frequency", 1) for x in (raw or []) if isinstance(x, dict) and x.get("word")}
+                        for w, c in extra.items():
+                            if w and w.strip() and w not in self.frequency_dict:
+                                self.frequency_dict[w.strip()] = c
+                                if len(self.frequency_dict) >= max_words:
+                                    break
+                        if extra:
+                            print(f"Large dict merged: {large_path.name} -> total {len(self.frequency_dict):,} words")
+                    except Exception as e:
+                        logger.debug(f"Large dict skip {large_path}: {e}")
+
+            if data or self.frequency_dict:
                 temp_dict = self.data_dir / "symspell_freq.txt"
                 try:
                     with open(temp_dict, 'w', encoding='utf-8') as tf:
-                        for word, count in data.items():
+                        for word, count in list(self.frequency_dict.items())[:200000]:
                             tf.write(f"{word} {count}\n")
                     try:
                         self.sym_spell.load_dictionary(str(temp_dict), term_index=0, count_index=1, separator=" ")
@@ -132,6 +165,10 @@ class NLPEngine:
                         print(f"SymSpell Load Error: {e}")
                 except Exception as e:
                     print(f"SymSpell dict write error: {e}")
+
+                # Trie: O(prefix) prefix arama, linear scan kaldırıldı (~20-50 ms hedef)
+                self.trie_engine = TrieEngine()
+                self.trie_engine.build_from_frequency_dict(self.frequency_dict)
             else:
                 print("Warning: No frequency dictionary found (data/tr_frequencies.json or turkish_dictionary.json).")
             
@@ -345,19 +382,29 @@ class NLPEngine:
                  
         return suggestions[:5]
 
+    def complete_prefix_fast(self, prefix: str, max_results: int = 10) -> List[Dict]:
+        """
+        Sadece Trie + user_dict. İki aşamalı sistemin ilk yanıtı (~20-50 ms).
+        """
+        return self._prefix_impl(prefix, max_results, trie_only=True)
+
     def complete_prefix(self, prefix: str, max_results: int = 10) -> List[Dict]:
         """
-        Hybrid Prefix Completion:
-        1. User Dictionary (Prioritize user's own vocabulary)
-        2. General Dictionary
+        Hybrid Prefix Completion (Trie + user dict):
+        1. User Dictionary (öncelik)
+        2. Trie (O(prefix) arama, linear scan yok)
         """
+        return self._prefix_impl(prefix, max_results, trie_only=False)
+
+    def _prefix_impl(
+        self, prefix: str, max_results: int, *, trie_only: bool = False
+    ) -> List[Dict]:
         if not prefix:
             return []
-            
-        prefix_lower = prefix.lower()
+        prefix_lower = prefix.lower().strip()
         results = []
         seen = set()
-        
+
         # 1. USER DICTIONARY
         if self.user_dict:
             user_matches_words = self.user_dict.get_top_phrases(prefix_lower, limit=5)
@@ -365,45 +412,33 @@ class NLPEngine:
                 if word not in seen:
                     results.append({
                         "word": word,
-                        "count": self.user_dict.get_frequency(word) * 100, # Boost user words significantly
-                        "source": "user"
+                        "count": self.user_dict.get_frequency(word) * 100,
+                        "source": "user",
                     })
                     seen.add(word)
 
-        # 2. GENERAL FREQUENCY DICT
-        if self.frequency_dict:
-            try:
-                # Scan general dict (this can be optimized with a trie in future for speed)
-                matches_found = 0
-                for word, count in self.frequency_dict.items():
-                    if matches_found >= max_results:
-                        break
-                        
-                    # Lowercase match
-                    if word.lower().startswith(prefix_lower) and word not in seen:
-                        results.append({
-                            "word": word,
-                            "count": count,
-                            "source": "dict"
-                        })
-                        seen.add(word)
-                        matches_found += 1
-            except Exception as e:
-                print(f"Prefix error: {e}")
+        # 2. TRIE (O(prefix) - büyük sözlükte anında his)
+        if self.trie_engine:
+            trie_results = self.trie_engine.search(prefix_lower, max_results=max_results * 2)
+            for r in trie_results:
+                w = r.get("word", "")
+                if w and w not in seen:
+                    results.append({
+                        "word": w,
+                        "count": r.get("frequency", 1),
+                        "source": "dict",
+                    })
+                    seen.add(w)
 
-        # FALLBACK: If absolutely nothing found, and prefix is short, suggest common words
-        if not results and len(prefix) >= 1:
-             defaults = ["merhaba", "nasılsın", "evet", "hayır", "tamam", "ama", "ali", "ara"]
-             for d in defaults:
-                 if d.startswith(prefix_lower) and d not in seen:
-                     results.append({
-                         "word": d,
-                         "count": 1,
-                         "source": "fallback"
-                     })
+        # FALLBACK
+        if not results and len(prefix_lower) >= 1:
+            defaults = ["merhaba", "nasılsın", "evet", "hayır", "tamam", "ama", "ali", "ara"]
+            for d in defaults:
+                if d.startswith(prefix_lower) and d not in seen:
+                    results.append({"word": d, "count": 1, "source": "fallback"})
+                    seen.add(d)
 
-        # Sort by 'count' (which implies likelihood)
-        results.sort(key=lambda x: x['count'], reverse=True)
+        results.sort(key=lambda x: x["count"], reverse=True)
         return results[:max_results]
 
     def analyze_sentiment(self, text: str) -> str:

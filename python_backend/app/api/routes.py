@@ -3,6 +3,26 @@ from app.api.schemas import ProcessRequest, ResponseModel, SuggestionItem
 from app.core.nlp_engine import NLPEngine, nlp_engine
 from app.core.cache import cache_manager
 import time
+import sys
+from pathlib import Path
+
+# Phrase completion (improvements) - lazy load
+_phrase_completer = None
+
+def _get_phrase_completer():
+    global _phrase_completer
+    if _phrase_completer is not None:
+        return _phrase_completer
+    try:
+        base = Path(__file__).resolve().parent.parent.parent
+        if str(base) not in sys.path:
+            sys.path.insert(0, str(base))
+        from improvements.phrase_completion import PhraseCompleter
+        _phrase_completer = PhraseCompleter(dictionary=None)
+        return _phrase_completer
+    except Exception as e:
+        print(f"[ROUTES] Phrase completion not loaded: {e}")
+        return None
 
 router = APIRouter()
 
@@ -11,56 +31,84 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            start_time = time.time()
             data = await websocket.receive_json()
-            # print(f"[WS DEBUG] Received: {data}") # Uncomment for full noise
             text = data.get("text", "")
-            print(f"[WS DEBUG] Processing text: '{text}'")
-            
-            suggestions = []
-            
-            # 1. Prefix Completion
             words = text.strip().split()
+
+            # --- AŞAMA 1: Hızlı yanıt (Trie + user_dict, ~20-50 ms) ---
+            fast_start = time.perf_counter()
+            fast_suggestions = []
             if words:
                 last_word = words[-1]
-                prefix_results = nlp_engine.complete_prefix(last_word, max_results=5)
+                prefix_results = nlp_engine.complete_prefix_fast(last_word, max_results=5)
                 for res in prefix_results:
-                    if res['word'].lower() != last_word.lower():
-                        # Score calculation: Base 10 + frequency boost
-                        raw_count = res.get('count', 0)
-                        score_val = 10.0 + (min(raw_count, 1000) / 100.0) 
-                        
-                        suggestions.append({
-                            "text": res['word'],
-                            "confidence": 1.0, 
-                            "type": 'completion',
+                    if res["word"].lower() != last_word.lower():
+                        raw_count = res.get("count", 0)
+                        score_val = 10.0 + (min(raw_count, 1000) / 100.0)
+                        fast_suggestions.append({
+                            "text": res["word"],
+                            "confidence": 1.0,
+                            "type": "completion",
                             "score": score_val,
-                            "source": res.get('source', 'unknown'),
-                            "description": "Tamamlama"
+                            "source": res.get("source", "unknown"),
+                            "description": "Tamamlama",
                         })
-            
-            # 2. Next Word (Hybrid)
+            fast_ms = (time.perf_counter() - fast_start) * 1000
+            await websocket.send_json({
+                "phase": "fast",
+                "suggestions": fast_suggestions,
+                "processing_time_ms": round(fast_ms, 2),
+            })
+
+            # --- AŞAMA 2: Arka planda zenginleştirilmiş (N-gram / BERT) ---
+            full_start = time.perf_counter()
+            suggestions = list(fast_suggestions)
+            seen_texts = {s["text"].lower() for s in suggestions}
+
             predictions = nlp_engine.predict_next(text)
             for pred in predictions[:3]:
-                suggestions.append({
-                     "text": pred['word'],
-                     "confidence": pred['score'],
-                     "type": 'next_word',
-                     "score": pred['score'] * 10, # ~9.0 range
-                     "source": pred['source'],
-                     "description": "Tahmin"
-                })
+                w = pred["word"]
+                if w.lower() not in seen_texts:
+                    suggestions.append({
+                        "text": w,
+                        "confidence": pred["score"],
+                        "type": "next_word",
+                        "score": pred["score"] * 10,
+                        "source": pred["source"],
+                        "description": "Tahmin",
+                    })
+                    seen_texts.add(w.lower())
 
-            print(f"[WS DEBUG] Sending {len(suggestions)} suggestions")
-            process_time = (time.time() - start_time) * 1000
+            # Phrase completion (bağlamlı ifade önerileri)
+            phrase_completer = _get_phrase_completer()
+            if phrase_completer and text.strip():
+                try:
+                    phrase_results = phrase_completer.complete_phrase(text.strip(), max_results=5)
+                    for r in phrase_results:
+                        t = (r.get("text") or "").strip()
+                        if t and t.lower() not in seen_texts:
+                            suggestions.append({
+                                "text": t,
+                                "confidence": 0.9,
+                                "type": "phrase",
+                                "score": float(r.get("score", 8.0)),
+                                "source": r.get("source", "phrase_completion"),
+                                "description": r.get("description", "İfade"),
+                            })
+                            seen_texts.add(t.lower())
+                except Exception as e:
+                    print(f"[ROUTES] Phrase completion error: {e}")
+
+            suggestions.sort(key=lambda x: x.get("score", 0), reverse=True)
+            full_ms = (time.perf_counter() - full_start) * 1000
             await websocket.send_json({
-                "suggestions": suggestions,
-                "processing_time_ms": process_time
+                "phase": "enhanced",
+                "suggestions": suggestions[:15],
+                "processing_time_ms": round(full_ms, 2),
             })
 
     except Exception as e:
         print(f"WebSocket Error: {e}")
-        pass
 
 async def get_engine():
     if not nlp_engine.initialized:
@@ -126,9 +174,9 @@ async def process_text(request: ProcessRequest, engine: NLPEngine = Depends(get_
     predictions = engine.predict_next(context_str)
     existing_texts = {s.text for s in suggestions}
     
-    for pred in predictions[:3]: 
+    for pred in predictions[:3]:
         if pred['word'] not in existing_texts:
-             suggestions.append(SuggestionItem(
+            suggestions.append(SuggestionItem(
                 text=pred['word'],
                 confidence=pred['score'],
                 type='next_word',
@@ -136,7 +184,27 @@ async def process_text(request: ProcessRequest, engine: NLPEngine = Depends(get_
                 source=pred.get('source', 'bert'),
                 description="Tahmin"
             ))
-            
+
+    # Phrase completion (bağlamlı ifade önerileri)
+    phrase_completer = _get_phrase_completer()
+    if phrase_completer and context_str.strip():
+        try:
+            phrase_results = phrase_completer.complete_phrase(context_str.strip(), max_results=5)
+            for r in phrase_results:
+                t = (r.get("text") or "").strip()
+                if t and t not in existing_texts:
+                    suggestions.append(SuggestionItem(
+                        text=t,
+                        confidence=0.9,
+                        type="phrase",
+                        score=float(r.get("score", 8.0)),
+                        source=r.get("source", "phrase_completion"),
+                        description=r.get("description", "İfade")
+                    ))
+                    existing_texts.add(t)
+        except Exception as e:
+            print(f"[ROUTES] Phrase completion error: {e}")
+
     # Sort suggestions by score descending
     suggestions.sort(key=lambda x: x.score, reverse=True)
             
@@ -169,8 +237,11 @@ async def learn_feedback(feedback: dict):
 @router.get("/health")
 async def health_check():
     from app.core.search_service import search_service
+    trie_ready = nlp_engine.trie_engine is not None and nlp_engine.trie_engine.word_count > 0
     return {
-        "status": "active", 
+        "status": "active",
         "transformer_loaded": nlp_engine.initialized,
-        "elasticsearch_available": search_service.available
+        "trie_ready": trie_ready,
+        "trie_words": nlp_engine.trie_engine.word_count if nlp_engine.trie_engine else 0,
+        "elasticsearch_available": search_service.available,
     }

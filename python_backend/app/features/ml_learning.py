@@ -8,7 +8,7 @@ from collections import defaultdict
 import json
 import os
 from datetime import datetime
-from redis_cache import cache
+from app.features.redis_cache import cache
 
 class MLLearningSystem:
     """ML tabanlı öğrenme sistemi - Redis Destekli (Production Ready)"""

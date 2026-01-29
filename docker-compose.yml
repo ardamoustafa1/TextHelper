@@ -1,16 +1,30 @@
+version: '3.8'
+
 services:
-  redis:
-    image: redis:alpine
-    container_name: texthelper_redis
+  backend:
+    build:
+      context: ./python_backend
+      dockerfile: Dockerfile
+    container_name: texthelper_backend
     ports:
-      - "6379:6379"
+      - "8080:8080"
     volumes:
-      - redis_data:/data
+      - ./python_backend:/app
+      - ./data:/app/data
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - REDIS_HOST=redis
+      - USE_TRANSFORMER=true
+      - USE_ELASTICSEARCH=true
+      - API_KEY=texthelper-secret-key-2024
+    depends_on:
+      - elasticsearch
+      - redis
     restart: always
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
-    container_name: texthelper_es
+    container_name: texthelper_elasticsearch
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -21,6 +35,12 @@ services:
       - es_data:/usr/share/elasticsearch/data
     restart: always
 
+  redis:
+    image: redis:alpine
+    container_name: texthelper_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
 volumes:
-  redis_data:
   es_data:

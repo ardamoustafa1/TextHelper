@@ -50,17 +50,13 @@ echo.
 :StartBackend
 REM --- PORT TEMIZIGI (8080) ---
 echo [INFO] Port 8080 kontrol ediliyor...
-REM Guvenli kontrol yontemi (Crash/Stuck onnleyici)
-netstat -aon | findstr ":8080" | findstr "LISTENING" > port_check.tmp || echo. > port_check.tmp
-set /p PORT_CHECK=<port_check.tmp
-if not "%PORT_CHECK%"=="" (
-    for /f "tokens=5" %%a in (port_check.tmp) do (
-        echo [UYARI] Port 8080 dolu (PID: %%a). Otomatik kapatiliyor...
+netstat -aon | findstr ":8080" | findstr "LISTENING" >nul
+if %errorlevel% equ 0 (
+    echo [UYARI] Port 8080 dolu. Otomatik temizleniyor...
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8080" ^| findstr "LISTENING"') do (
         taskkill /F /PID %%a >nul 2>&1
     )
 )
-if exist port_check.tmp del port_check.tmp
-echo [OK] Port 8080 temiz.
 
 REM --- BACKEND BASLATMA ---
 echo [INFO] Python altyapisi hazirlaniyor...

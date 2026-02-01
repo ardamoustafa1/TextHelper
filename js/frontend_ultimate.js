@@ -1,14 +1,12 @@
-/**
- * TextHelper ULTIMATE Frontend
- * Python FastAPI backend'e bağlanır
- */
+// TextHelper Frontend
+// Backend baglantisi saglar
 
 class TextHelperUltimate {
     constructor(config = {}) {
         this.config = {
             apiUrl: config.apiUrl || 'http://localhost:8080',
             wsUrl: config.wsUrl || 'ws://localhost:8080/api/v1/ws',
-            useWebSocket: false, // FORCE HTTP FOR STABILITY
+            useWebSocket: false, // Stabilite icin kapali
             maxSuggestions: config.maxSuggestions || 80,
             ...config
         };
@@ -20,11 +18,11 @@ class TextHelperUltimate {
         this.currentSuggestions = [];
         this._lastWsRequestText = null; // WebSocket phase: enhanced sadece aynı input için uygulansın
 
-        // Zero-Latency Cache
+        // Cache
         this.cache = new Map();
         this.MAX_CACHE_SIZE = 500;
 
-        // Smart Personalization
+        // Kullanici kelimeleri
         this.userVocabulary = this.loadUserVocabulary();
 
         this.init();
@@ -67,9 +65,7 @@ class TextHelperUltimate {
         this.cache.set(key, value);
     }
 
-    /**
-     * Input elementine bağla
-     */
+    // Input'a bagla
     attach(inputElement, suggestionsContainer) {
         this.inputElement = inputElement;
         this.suggestionsContainer = suggestionsContainer;
@@ -150,9 +146,7 @@ class TextHelperUltimate {
         }
     }
 
-    /**
-     * WebSocket bağlantısı (Geliştirilmiş)
-     */
+    // WebSocket baglantisi
     connectWebSocket() {
         if (this._wsConnecting) return;
         this._wsConnecting = true;
@@ -231,9 +225,7 @@ class TextHelperUltimate {
         }
     }
 
-    /**
-     * Son gelen mesajdan bağlam (context) çıkar
-     */
+    // Son mesajdan context cikar
     getContextFromLastMessage() {
         // Chat mesajlarını bul
         if (!this.suggestionsContainer) return "";
@@ -255,9 +247,7 @@ class TextHelperUltimate {
         return lastMessage;
     }
 
-    /**
-     * Input değiştiğinde (Geliştirilmiş - Context Aware)
-     */
+    // Input degistiginde
     async handleInput(text) {
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
@@ -327,9 +317,7 @@ class TextHelperUltimate {
         }, 50);
     }
 
-    /**
-     * REST API ile önerileri al
-     */
+    // API'den onerileri cek
     async fetchSuggestions(text) {
         try {
             // New Enterprise API Endpoint
@@ -400,7 +388,7 @@ class TextHelperUltimate {
 
         this.currentSuggestions = suggestions;
 
-        console.log(`[DEBUG] ${this.currentSuggestions.length} öneri alındı:`, this.currentSuggestions);
+        // console.log(`[DEBUG] ${this.currentSuggestions.length} öneri alındı:`, this.currentSuggestions);
 
         if (this.suggestionsContainer) {
             if (this.currentSuggestions.length > 0) {

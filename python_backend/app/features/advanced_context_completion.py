@@ -1,6 +1,6 @@
 """
 Advanced Context-Aware Completion System
-Gelişmiş context-aware tamamlama - piyasanın en iyisi için
+Context analizi ve tamamlama sistemi
 """
 
 from typing import List, Dict, Optional, Tuple
@@ -8,10 +8,10 @@ import re
 from collections import defaultdict
 
 class AdvancedContextCompleter:
-    """Gelişmiş context-aware tamamlama sistemi"""
+    """Context analizi ve tamamlama"""
     
     def __init__(self, dictionary=None):
-        """Dictionary: Sözlük referansı (opsiyonel)"""
+        # Sozluk referansi (opsiyonel)
         self.dictionary = dictionary
         
         # Domain tespiti için anahtar kelimeler
@@ -33,7 +33,7 @@ class AdvancedContextCompleter:
             'general': []
         }
         
-        # Gramer kuralları (basit Türkçe NLP)
+        # Gramer kurallari
         self.grammar_rules = {
             'verb_endings': ['mak', 'mek', 'acak', 'ecek', 'ıyor', 'iyor', 'uyor', 'üyor'],
             'noun_endings': ['lık', 'lik', 'luk', 'lük', 'cı', 'ci', 'cu', 'cü'],
@@ -41,7 +41,7 @@ class AdvancedContextCompleter:
         }
     
     def analyze_full_context(self, text: str) -> Dict[str, any]:
-        """Tüm cümlenin bağlamını analiz et"""
+        # Cumle baglami analizi
         words = text.lower().split()
         
         analysis = {
@@ -57,7 +57,7 @@ class AdvancedContextCompleter:
         return analysis
     
     def _detect_domain(self, text: str) -> str:
-        """Cümlenin domain'ini tespit et"""
+        # Domain tespiti
         text_lower = text.lower()
         
         for domain, keywords in self.domain_keywords.items():
@@ -206,7 +206,7 @@ class AdvancedContextCompleter:
         return scored_suggestions
     
     def suggest_with_semantic_similarity(self, text: str, suggestions: List[Dict]) -> List[Dict]:
-        """Anlamsal benzerlik ile öneri (basit versiyon - BERT/Word2Vec için hazır)"""
+        """Anlamsal benzerlik ile öneri"""
         analysis = self.analyze_full_context(text)
         domain = analysis.get('domain', 'general')
         intent = analysis.get('intent', 'general')
@@ -269,13 +269,13 @@ class AdvancedContextCompleter:
                         score = result.get('score', 8.0)
                         
                         if word and word.lower() != last_word:
-                            # ÖNCE: Sadece son kelime için öneriler (EN YÜKSEK ÖNCELİK!)
+                            # Son kelime onerileri (oncelikli)
                             results.append({
                                 'text': word,
                                 'type': 'dictionary',
-                                'score': 15.0 + (score / 10),  # EN YÜKSEK SKOR
-                                'description': f'Son kelime önerisi (sözlük)',
-                                'source': 'advanced_context',
+                                'score': 15.0 + (score / 10),
+                                'description': f'Sozluk onerisi',
+                                'source': 'context',
                                 'last_word_match': True
                             })
                             

@@ -23,44 +23,53 @@ class TransformerPredictor:
         
     async def load_model(self):
         """Transformer modelini yükle"""
-        # ÖNCE: Gerçek transformer modeli kullan (varsa) - HER ZAMAN DENE!
+        # Model varsa kullan
         if REAL_TRANSFORMER_AVAILABLE and transformer_model:
             await transformer_model.load_model()
             self.model_loaded = transformer_model.model_loaded
             if self.model_loaded:
-                logger.info("Gercek Transformer modeli yuklendi")
+                logger.info("Model yuklendi")
                 return
         
-        # Fallback: Pattern-based (sadece gerçek model yoksa)
+        # Fallback (sadece model yoksa)
         if not self.use_transformer and not self.model_loaded:
-            logger.info("Transformer kullanimi devre disi (USE_TRANSFORMER=true ile aktif edin)")
-            logger.info("Gercek Transformer modeli yuklenemedi, pattern-based fallback kullanilacak")
+            logger.info("Model devre disi")
             return
             
         try:
             # Hugging Face transformers
             from transformers import AutoTokenizer, AutoModelForCausalLM
             
-            logger.info("Transformer modeli yukleniyor...")
-            # BERT yerine GPT-2 modeline geçiş (Text Generation için daha uygun)
+            logger.info("Model yukleniyor...")
+            # GPT-2 modeli
             model_name = "ytu-ce-cosmos/turkish-gpt2-medium"
             
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(model_name)
+            # Local model check
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            local_model_path = os.path.join(base_dir, "models", "turkish-gpt2-medium")
+            
+            if os.path.exists(local_model_path):
+                logger.info(f"Offline model bulundu: {local_model_path}")
+                model_name = local_model_path
+            else:
+                logger.info(f"Offline model bulunamadi, internetten indirilecek: {model_name}")
+            
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=os.path.exists(local_model_path))
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, local_files_only=os.path.exists(local_model_path))
             self.model.eval()  # Evaluation mode
             
             self.model_loaded = True
-            logger.info("Transformer modeli hazir")
+            logger.info("Model hazir")
         except ImportError:
-            logger.warning("transformers kutuphanesi kurulu degil: pip install transformers torch")
+            logger.warning("transformers eksik (pip install transformers torch)")
             self.model_loaded = False
         except Exception as e:
-            logger.warning(f"Transformer modeli yuklenemedi: {e}")
+            logger.warning(f"Model yuklenemedi: {e}")
             self.model_loaded = False
     
     async def predict(self, text: str, max_suggestions: int = 5) -> List[Suggestion]:
         """AI ile tahmin yap"""
-        # Gerçek transformer modeli kullan (varsa)
+        # Model varsa kullan
         if REAL_TRANSFORMER_AVAILABLE and transformer_model and transformer_model.model_loaded:
             results = await transformer_model.predict(text, max_suggestions)
             return [Suggestion(**r) for r in results]
@@ -100,11 +109,11 @@ class TransformerPredictor:
             
             return suggestions[:max_suggestions]
         except Exception as e:
-            logger.error(f"Transformer tahmin hatası: {e}")
+            logger.error(f"Tahmin hatası: {e}")
             return self._fallback_predictions(text, max_suggestions)
     
     def _fallback_predictions(self, text: str, max_suggestions: int) -> List[Suggestion]:
-        """Fallback: Akıllı pattern matching"""
+        """Fallback: Basit kurallar"""
         suggestions = []
         words = text.split()
         last_word = words[-1].lower() if words else text.lower()

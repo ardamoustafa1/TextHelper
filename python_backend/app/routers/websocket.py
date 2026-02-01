@@ -24,7 +24,7 @@ def _check_ws_rate_limit(user_id: str) -> bool:
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket ile real-time öneriler"""
+    """Real-time oneriler"""
     await websocket.accept()
     
     try:

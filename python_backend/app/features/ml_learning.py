@@ -1,6 +1,6 @@
 """
-Machine Learning Öğrenme Sistemi
-Kullanıcı davranışından öğrenir
+Machine Learning Ogrenme Sistemi
+Kullanici davranisindan ogrenir
 """
 
 from typing import List, Dict
@@ -11,7 +11,7 @@ from datetime import datetime
 from app.features.redis_cache import cache
 
 class MLLearningSystem:
-    """ML tabanlı öğrenme sistemi - Redis Destekli (Production Ready)"""
+    """ML tabanlı ogrenme sistemi - Redis Destekli"""
     
     def __init__(self):
         # Redis prefix'leri
@@ -37,10 +37,9 @@ class MLLearningSystem:
     ):
         """Kullanıcı etkileşiminden öğren (Redis + Async)"""
         try:
-            # 1. Kullanıcı Tercihleri (Redis Hash)
+            # 1. Kullanici Tercihleri (Redis Hash)
             if cache and cache.available:
                 # Key: ml:pref:{user_id} -> Field: {suggestion} -> Value: count
-                # Redis'te atomik artırma (HINCRBY) - Race condition olmaz
                 cache.client.hincrby(f"{self.PREFIX_PREF}:{user_id}", selected_suggestion, 1)
             else:
                 self.local_preferences[user_id][selected_suggestion] += 1

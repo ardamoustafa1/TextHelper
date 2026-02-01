@@ -7,11 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Path setup to support legacy modules
-# Path setup
+# Path ayari
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
-
-# Removed legacy 'improvements' path hack in favor of app.features package
 
 
 from app.core.config import settings
@@ -33,33 +31,32 @@ async def lifespan(app: FastAPI):
     # --- STARTUP ---
     logger.info("Sistem baslatiliyor...")
     
-    # 1. Transformer Model (Lazy Load)
+    # 1. ML Modeli (Arka planda)
     try:
         if settings.USE_TRANSFORMER:
-            logger.info("Transformer modeli yukleniyor (arka planda)...")
+            logger.info("Model yukleniyor...")
             asyncio.create_task(transformer_predictor.load_model())
     except Exception as e:
-        logger.warning(f"Transformer model baslatma hatasi: {e}")
+        logger.warning(f"Model hatasi: {e}")
         
-    # 2. Elasticsearch ve Dictionary
+    # 2. Arama Motoru
     try:
         await elasticsearch_predictor.connect_elasticsearch()
-        # Local dictionary load (if not loaded)
+        # Sozlugu yukle
         elasticsearch_predictor._load_dictionary()
     except Exception as e:
-        logger.warning(f"Elasticsearch baslatma hatasi: {e}")
+        logger.warning(f"ES hatasi: {e}")
         
-    # 3. Trie Index (Ultra fast search)
+    # 3. Hizli Index (Trie)
     if TRIE_AVAILABLE and trie_index:
         try:
-            logger.info("Trie Index olusturuluyor...")
+            logger.info("Index olusturuluyor...")
             dict_source = elasticsearch_predictor.local_dictionary
             if dict_source:
-                # Run in thread/background to avoid blocking
                 await asyncio.to_thread(trie_index.build_index, dict_source)
-                logger.info(f"Trie Index hazir ({trie_index.word_count} kelime)")
+                logger.info(f"Index hazir ({trie_index.word_count} kelime)")
         except Exception as e:
-            logger.warning(f"Trie index hatasi: {e}")
+            logger.warning(f"Index hatasi: {e}")
 
     logger.info("Sistem hazir!")
     
@@ -92,7 +89,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Security Middleware (Manually added since Starlette middleware wrapper handles imports better here)
+# Guvenlik
 from starlette.middleware.base import BaseHTTPMiddleware
 app.add_middleware(BaseHTTPMiddleware, dispatch=api_key_middleware)
 

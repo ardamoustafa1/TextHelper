@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import time
 
-# Lazy imports to avoid startup bottleneck
+# Helper imports
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM, pipeline
 from symspellpy import SymSpell, Verbosity
@@ -42,10 +42,10 @@ class NLPEngine:
         
         self.tokenizer = None
         self.model = None
-        self.frequency_dict = {}  # word -> frequency
-        self.trie_engine: Optional[TrieEngine] = None  # O(prefix) arama, iPhone hissi
+        self.frequency_dict = {}
+        self.trie_engine: Optional[TrieEngine] = None
         
-        # Initialize Personalization Engines
+        # Personalization
         try:
             self.user_dict = UserDictionary(str(self.data_dir / "user_dictionary.json"))
             self.ngram_engine = NgramEngine(str(self.data_dir / "user_ngrams.json"))
@@ -58,7 +58,7 @@ class NLPEngine:
         self.initialized = True
 
     async def load_models(self):
-        """Async loader for heavy models"""
+        """Model yukleme islemi"""
         if self.fill_mask and self.sym_spell:
             return
 
@@ -71,10 +71,8 @@ class NLPEngine:
         use_bert = os.getenv("USE_BERT", "false").lower() == "true"
         use_gpt = os.getenv("USE_GPT", "false").lower() == "true"
         
-        # Performance Tuning
         use_quantization = os.getenv("USE_QUANTIZATION", "false").lower() == "true"
         if use_quantization:
-            # Force PyTorch to be friendly to CPU
             try:
                 threads = int(os.getenv("OMP_NUM_THREADS", "1"))
                 torch.set_num_threads(threads)
@@ -92,7 +90,6 @@ class NLPEngine:
 
         if use_symspell:
             print("Loading SymSpell...")
-            # CRITICAL FIX: Reduced max_edit_distance to 1 and prefix_length to 3 to prevent MemoryError
             self.sym_spell = SymSpell(max_dictionary_edit_distance=1, prefix_length=3)
             self.frequency_dict = {}  # Store raw dict for prefix completion
             
@@ -166,7 +163,7 @@ class NLPEngine:
                 except Exception as e:
                     print(f"SymSpell dict write error: {e}")
 
-                # Trie: O(prefix) prefix arama, linear scan kaldırıldı (~20-50 ms hedef)
+                # Trie yapisi
                 self.trie_engine = TrieEngine()
                 self.trie_engine.build_from_frequency_dict(self.frequency_dict)
             else:
@@ -180,11 +177,9 @@ class NLPEngine:
         if use_bert:
             print("Loading Transformer (BERT)...")
             try:
-                # OPTIMIZATION: Use DistilBERT if optimized mode is on, else full BERT
                 if use_quantization:
-                    # Lighter, faster model for optimization mode
                     model_name = "dbmdz/distilbert-base-turkish-cased"
-                    print("  -> Using Optimized Model (DistilBERT)")
+                    print("  -> Using DistilBERT")
                 else:
                     bert_path = self.models_dir / "bert_tr"
                     model_name = str(bert_path) if bert_path.exists() else "dbmdz/bert-base-turkish-cased"
@@ -319,9 +314,9 @@ class NLPEngine:
 
     def predict_next(self, context: str) -> List[Dict]:
         """
-        Hybrid prediction:
-        1. N-gram (User History) - Highest Priority
-        2. BERT (Contextual Embedding) - General Knowledge
+        Gelecek kelime tahmini:
+        1. N-gram (Gecmis)
+        2. BERT (Context)
         """
         suggestions = []
         suggestions_text = set() # For deduplication
@@ -383,17 +378,11 @@ class NLPEngine:
         return suggestions[:5]
 
     def complete_prefix_fast(self, prefix: str, max_results: int = 10) -> List[Dict]:
-        """
-        Sadece Trie + user_dict. İki aşamalı sistemin ilk yanıtı (~20-50 ms).
-        """
+        # Sadece Trie + user_dict
         return self._prefix_impl(prefix, max_results, trie_only=True)
 
     def complete_prefix(self, prefix: str, max_results: int = 10) -> List[Dict]:
-        """
-        Hybrid Prefix Completion (Trie + user dict):
-        1. User Dictionary (öncelik)
-        2. Trie (O(prefix) arama, linear scan yok)
-        """
+        # Trie + user dict
         return self._prefix_impl(prefix, max_results, trie_only=False)
 
     def _prefix_impl(

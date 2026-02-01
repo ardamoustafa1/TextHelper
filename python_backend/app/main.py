@@ -4,6 +4,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import uvicorn
 
 # Path setup to support legacy modules
@@ -113,9 +115,8 @@ static_dir = os.path.join(BASE_DIR, "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     
-    # Imports for static
-    from fastapi.responses import FileResponse
-    from fastapi.staticfiles import StaticFiles
+    # Imports for static moved to top
+
 
     # Root -> index.html
     @app.get("/")

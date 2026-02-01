@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # Path setup to support legacy modules
 # Path ayari
@@ -107,6 +109,22 @@ app.include_router(prediction.router, prefix="/api/v1", tags=["v1"])
 app.include_router(learning.router, prefix="/api/v1", tags=["v1"])
 app.include_router(system.router, prefix="/api/v1", tags=["v1"])
 app.include_router(websocket.router, prefix="/api/v1", tags=["v1"]) # Fix for frontend
+
+# Frontend Statik Dosyalar (En altta olmali)
+static_dir = os.path.join(BASE_DIR, "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    
+    # Root -> index.html
+    @app.get("/")
+    async def read_index():
+        return FileResponse(os.path.join(static_dir, "index.html"))
+
+    # JS/CSS klasorleri icin direkt erisim
+    app.mount("/js", StaticFiles(directory=os.path.join(static_dir, "js")), name="js")
+    app.mount("/css", StaticFiles(directory=os.path.join(static_dir, "css")), name="css")
+else:
+    logger.warning("Static klasoru bulunamadi (Frontend yuklenmedi)")
 
 if __name__ == "__main__":
     is_dev = os.getenv("DEV_MODE", "false").lower() == "true"

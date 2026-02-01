@@ -197,14 +197,8 @@
         let connectionStatus = document.getElementById('connectionStatus');
 
         // Backend URL'i ayarla
-        // Backend URL'i ayarla (Otomatik Tespiti)
-        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-
-        // Eger localhost ise port 8080, degilse (Render vb.) root domain
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_URL = isLocal ? 'http://localhost:8080' : `${protocol}//${window.location.host}`;
-        const WS_URL = isLocal ? 'ws://localhost:8080/api/v1/ws' : `${wsProtocol}//${window.location.host}/api/v1/ws`;
+        const API_URL = 'http://localhost:8080';
+        const WS_URL = 'ws://localhost:8080/api/v1/ws';
 
         // Başlat
         document.addEventListener('DOMContentLoaded', () => {

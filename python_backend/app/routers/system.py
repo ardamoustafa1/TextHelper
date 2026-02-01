@@ -6,15 +6,14 @@ from app.core.config import settings
 
 router = APIRouter()
 
-# Root route main.py tarafindan frontend icin kullaniliyor
-# @router.get("/")
-# async def root():
-#     return {
-#         "message": "TextHelper ULTIMATE API",
-#         "version": "2.0.0",
-#         "status": "running",
-#         "architecture": "Hybrid: Transformer + Elasticsearch + FastAPI",
-#     }
+@router.get("/")
+async def root():
+    return {
+        "message": "TextHelper ULTIMATE API",
+        "version": "2.0.0",
+        "status": "running",
+        "architecture": "Hybrid: Transformer + Elasticsearch + FastAPI",
+    }
 
 @router.get("/health")
 async def health():

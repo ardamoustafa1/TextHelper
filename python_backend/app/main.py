@@ -5,8 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 # Path setup to support legacy modules
 # Path ayari
@@ -99,7 +97,7 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=api_key_middleware)
 app.add_exception_handler(Exception, global_exception_handler)
 
 # Routers
-app.include_router(system.router)
+# app.include_router(system.router) # Root route cakismasi yapiyor, sadece /api/v1 altinda olsun
 app.include_router(prediction.router, tags=["prediction"])
 app.include_router(learning.router, tags=["learning"])
 app.include_router(websocket.router, tags=["realtime"])
@@ -110,11 +108,15 @@ app.include_router(learning.router, prefix="/api/v1", tags=["v1"])
 app.include_router(system.router, prefix="/api/v1", tags=["v1"])
 app.include_router(websocket.router, prefix="/api/v1", tags=["v1"]) # Fix for frontend
 
-# Frontend Statik Dosyalar (En altta olmali)
+# Frontend Statik Dosyalar (En altta ve Duzgun Sirada)
 static_dir = os.path.join(BASE_DIR, "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     
+    # Imports for static
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
     # Root -> index.html
     @app.get("/")
     async def read_index():

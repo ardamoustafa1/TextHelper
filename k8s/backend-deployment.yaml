@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: texthelper-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: texthelper-backend
+  template:
+    metadata:
+      labels:
+        app: texthelper-backend
+    spec:
+      containers:
+        - name: backend
+          image: your-registry/texthelper-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ENV
+              value: "prod"
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: texthelper-secrets
+                  key: api-key
+            - name: ELASTICSEARCH_HOST
+              value: "http://elasticsearch:9200"
+            - name: REDIS_HOST
+              value: "redis"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+

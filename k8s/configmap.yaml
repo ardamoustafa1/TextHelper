@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: texthelper-config
+data:
+  LOG_LEVEL: "INFO"
+  USE_TRANSFORMER: "true"
+  USE_ELASTICSEARCH: "true"
+  ENABLE_HEAVY_FEATURES: "true"
+

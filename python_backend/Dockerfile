@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://dow
 
 # Model indirme (Build sirasinda indirilsin ki image icinde hazir olsun)
 COPY download_model.py .
-RUN python download_model.py
+RUN python download_model.py && rm -rf /root/.cache/huggingface /root/.cache/pip
 
 # Uygulama kodunu kopyala
 # python_backend dizini içindeyiz, tüm içeriği /app içine atıyoruz

@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Bağımlılıkları kopyala ve yükle
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Sadece islemci (CPU) versiyonu torch kurmak icin extra-index-url ekliyoruz (4 GB tasarruf saglar)
+RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Model indirme (Build sirasinda indirilsin ki image icinde hazir olsun)
 COPY download_model.py .

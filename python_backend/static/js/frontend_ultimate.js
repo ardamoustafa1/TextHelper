@@ -324,7 +324,8 @@ class TextHelperUltimate {
             const response = await fetch(`${this.config.apiUrl}/api/v1/process`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-API-Key': 'texthelper-secret-key-2024'
                 },
                 body: JSON.stringify({
                     text: text,
@@ -620,7 +621,10 @@ class TextHelperUltimate {
         try {
             const res = await fetch(`${this.config.apiUrl}/api/v1/learn`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': 'texthelper-secret-key-2024'
+                },
                 body: JSON.stringify({ text: String(message).trim() })
             });
             if (!res.ok) throw new Error(`Learn ${res.status}`);

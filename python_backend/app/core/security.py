@@ -11,8 +11,9 @@ async def api_key_middleware(request: Request, call_next):
     - In dev environment, localhost calls are allowed without API key.
     - In non-dev environments, a valid X-API-Key (or api_key query param) is required.
     """
-    # Health & docs should always be accessible
-    if request.url.path in {"/docs", "/openapi.json", "/api/v1/health", "/health"}:
+    # Health, docs, and Static Frontend files should always be accessible
+    path = request.url.path
+    if path in {"/", "/docs", "/openapi.json", "/api/v1/health", "/health"} or path.startswith(("/static", "/js", "/css")):
         return await call_next(request)
 
     client_host = request.client.host if request.client else None

@@ -1,166 +1,145 @@
-# TextHelper Ultimate AI Platform
-[![Enterprise Ready](https://img.shields.io/badge/Enterprise-Ready-blueviolet?style=for-the-badge&logo=appveyor)](https://github.com/ardamoustafa1/TextHelper)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+# TextHelper Ultimate
 
-**The Next-Generation NLP Orchestration Engine.**  
-*Delivering iPhone-level predictive intelligence with sub-50ms latency for enterprise applications.*
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Async-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/)
 
----
+Turkce metin tamamlama ve oneri motoru: hizli prefix arama (Trie), sozluk/fuzzy arama (Elasticsearch veya local), ve opsiyonel transformer destekli hibrit bir FastAPI servisi.
 
-## 🚀 Executive Summary
-
-TextHelper Ultimate is not just an autocomplete tool; it is a **high-performance NLP Decision Engine** architected for scale. It solves the critical "Latency vs. Intelligence" trade-off by implementing a sophisticated **Hybrid Orchestrator** that intelligently routes queries between:
-
-1.  **Instant Memory Tries:** For zero-latency (<1ms) prefix lookups.
-2.  **Elasticsearch Clusters:** For fuzzy matching and typo tolerance across millions of documents.
-3.  **Neural Transformers (BERT/GPT):** For deep contextual understanding and next-word prediction.
-4.  **Context Analyzer:** A specialized module that adapts suggestions based on user intent (e.g., Customer Support vs. Technical Chat).
-
-Designed for **High-Throughput SaaS**, **Banking Chatbots**, and **Customer Service Platforms**, providing a secure, scalable, and intelligent typing experience.
+Bu README, dogrudan kod tabanindaki mevcut yapiya gore hazirlandi; abartili benchmark veya kanitlanmamis iddia icermez.
 
 ---
 
-## 🏗 Enterprise Architecture
+## Neler Sunuyor?
 
-The system has been refactored into a modular, microservices-ready structure designed for maintainability and horizontal scaling.
-
-### Core Components (`app/`)
-
-*   **🛡️ Security Core (`app/core/security.py`):**
-    *   **Rate Limiting:** IP-based and User-based throttling to prevent abuse (Redis-backed).
-    *   **Input Sanitization:** XSS and Injection protection for all prediction inputs.
-    *   **API Key Management:** Robust authentication middleware with localhost bypass for development.
-
-*   **🧠 Intelligent Orchestrator (`app/services/orchestrator.py`):**
-    *   **Parallel Execution:** Asynchronously queries AI, Search, and Dictionary engines.
-    *   **Smart Merging:** Normalizes data types (Objects/Dicts) and ranks suggestions based on confidence scores.
-    *   **Fallback Safety:** Guaranteed responses via local dictionaries if external services (AI/Elastic) are unreachable.
-
-*   **🔍 Context Engine (`app/features/advanced_context_completion.py`):**
-    *   **Intent Detection:** Analyzes conversation history to detect intents like "Greeting", "Apology", "Technical Issue".
-    *   **Grammar Awareness:** Adjusts suggestions based on sentence structure.
+- **Hybrid prediction pipeline:** `trie + dictionary + optional elasticsearch + optional transformer`.
+- **Realtime API + WebSocket:** hem HTTP endpointleri hem anlik oneri akisi.
+- **Fail-safe fallback:** Elasticsearch/Redis/model yoksa local sozluk ve in-memory akisla devam eder.
+- **Moduler feature mimarisi:** `app/features` altinda ac-kapa calisabilen moduller.
+- **Ogrenebilir sistem:** `/learn` endpointi ve batch scriptleri ile domain sozlugu guclendirilebilir.
+- **Uretime uygun kosum:** Docker Compose, K8s ornekleri ve CI testi mevcut.
 
 ---
 
-## 🛠 Tech Stack & Specifications
+## Mimari Genel Bakis
 
-| Component | Technology | Role |
-|-----------|------------|------|
-| **Framework** | **FastAPI (Python 3.11)** | High-performance async backend. |
-| **Orchestration** | **Python Asyncio** | Non-blocking concurrent processing. |
-| **Search Engine** | **Elasticsearch 8.x** | Scalable fuzzy search & indexing. |
-| **AI Layer** | **HuggingFace / Torch** | Transformer models for deep learning predictions. |
-| **Caching** | **Redis (Optional)** | User preference & rate limit caching. |
-| **Deployment** | **Docker Compose** | Containerized "One-Click" deployment. |
-
----
-
-## 📦 Deployment
-
-### Production (Docker)
-For scalable, isolated environments:
-```bash
-./DOCKER_BASLAT.bat
-```
-*Launches Redis and Elasticsearch containers optimized for production.*
-
-#### Environment configuration (critical for production)
-
-Core environment variables:
-
-- `ENV` — `dev` / `staging` / `prod` (affects security defaults).
-- `LOG_LEVEL` — e.g. `INFO`, `WARNING`, `DEBUG`.
-- `API_KEY` — secret used by the `X-API-Key` authentication middleware.
-- `ALLOWED_ORIGINS` — comma-separated list of allowed CORS origins  
-  (e.g. `https://portal.vodafone.com,https://agent.vodafone.com`).
-- `ELASTICSEARCH_HOST` — full URL to Elasticsearch (e.g. `http://elasticsearch:9200`).
-- `REDIS_HOST` / `REDIS_PORT` — Redis connection settings.
-- `USE_TRANSFORMER`, `USE_ELASTICSEARCH`, `ENABLE_HEAVY_FEATURES` — feature flags for AI/search.
-
-#### Kubernetes (example manifests)
-
-Under `k8s/` you will find example manifests:
-
-- `backend-deployment.yaml` — FastAPI backend Deployment with liveness/readiness probes.
-- `backend-service.yaml` — ClusterIP Service exposing the backend on port 80 → 8080.
-- `configmap.yaml` — non-secret configuration (log level, feature flags).
-- `secret-example.yaml` — example Secret for `API_KEY` (must be replaced in production).
-
-These are templates; adjust image name, replicas, resources and ingress according to your cluster and Vodafone’s standards.
-
-### 📚 Expanding the Turkish dictionary (word coverage)
-
-- **Generate large built‑in dictionary**
-  - From `python_backend/app/features`, run:
-    ```bash
-    cd python_backend
-    python -m app.features.generate_large_dictionary
-    ```
-  - This creates/updates `turkish_dictionary.json` with tens of thousands of Turkish words and frequencies, which are then loaded by `NLPEngine`.
-
-- **Batch‑learn your own texts**
-  - Put your historic chat/log data into a UTF‑8 text file, **one message per line**.
-  - Then run:
-    ```bash
-    cd python_backend
-    python -m scripts.batch_learn path/to/texts.txt --user-id my-domain
-    ```
-  - This feeds your own sentences into the learning pipeline (`UserDictionary`, n‑gram, ML learning and ranking), so TextHelper starts with a rich, domain‑specific vocabulary.
-
-- **Build frequency dictionary from external corpora**
-  - Put any large Turkish text files (one or more `.txt` files) under a folder, then run:
-    ```bash
-    cd python_backend
-    python -m scripts.build_frequencies path/to/corpus1.txt path/to/corpus2.txt
-    ```
-  - This updates `data/tr_frequencies.json` by extracting all Turkish words and their frequencies from your corpora, which in turn powers SymSpell, trie and prefix completion with a much larger vocabulary.
-
-### Local Development
-For rapid iteration with hot-reloading:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
-```
-*Automatically detects missing services and falls back to in-memory structures.*
-
-### API Security
-The system enforces API Key authentication by default.
-- **Production:** Requires `X-API-Key` header.
-- **Localhost:** Automatically bypassed for friction-free development.
-
-Requests must include:
-
-```http
-X-API-Key: <your-secret-api-key>
+```mermaid
+flowchart LR
+    A[Client: Web / Mobile / Bot] --> B[FastAPI Routers]
+    B --> C[Security + API Key + Rate Limit + Observability]
+    C --> D[Hybrid Orchestrator]
+    D --> E[Trie Index]
+    D --> F[Search Service]
+    D --> G[AI Service]
+    D --> H[Optional Features]
+    F --> I[(Elasticsearch or Local Dictionary)]
+    C --> J[(Redis or In-memory)]
+    D --> K[Ranking + Merge + Fallback]
+    K --> A
 ```
 
-Health and metrics endpoints:
+### Katmanlar
 
-- `GET /api/v1/health` — deep health status for orchestrator and dependencies.
-- `GET /api/v1/metrics` — lightweight JSON metrics (request counts, avg latency).
-
-For production, expose these only via your internal network / monitoring stack.
+- **API Katmani (`python_backend/app/routers`)**
+  - `prediction.py`: `/predict`, `/process`, `/correct`, `/autocorrect/undo`
+  - `learning.py`: `/learn`
+  - `system.py`: `/health`, `/metrics`, `/index_words`
+  - `websocket.py`: `/ws`
+- **Orkestrasyon (`python_backend/app/services/orchestrator.py`)**
+  - Paralel task calistirma, timeout katmanlari, normalize/merge/rank, garanti fallback.
+- **Servisler (`python_backend/app/services`)**
+  - `ai.py`, `search.py` gibi cekirdek servisler.
+- **Feature Modulleri (`python_backend/app/features`)**
+  - Trie, context completion, n-gram, ranking, emoji, domain dictionary vb.
+- **Core Altyapi (`python_backend/app/core`)**
+  - API key middleware, global rate limit, logging, telemetry, observability.
 
 ---
 
-## 🔌 API Reference
+## Predict Akisi (Gercek Isleyis)
 
-### POST `/api/v1/predict`
-The main entry point for the suggestion engine.
+`POST /predict` cagrisi geldiginde akisin ozeti:
 
-**Request:**
+1. Router seviyesinde request validasyonu + local rate limit + input security kontrolu.
+2. `HybridOrchestrator.predict(...)` calisir.
+3. Kullanici bazli debounce (50ms) uygulanir.
+4. Context tabanli hizli cevaplar denenir.
+5. Paralel prediction taskleri tetiklenir:
+   - Trie arama
+   - Search (Elasticsearch varsa ES, yoksa local dictionary)
+   - Large/medium dictionary
+   - Opsiyonel AI, n-gram, phrase, domain, emoji, template
+6. Sonuclar normalize edilir (dict/object farklari toparlanir), duplicate temizlenir, skorlanir.
+7. Gerekirse relevance/ranking katmanlari uygulanir.
+8. Bos sonuc durumunda fallback devreye girer (local dictionary garantisi).
+9. `PredictionResponse` doner.
+
+---
+
+## Proje Yapisi
+
+```text
+TextHelper-main/
+├─ python_backend/
+│  ├─ app/
+│  │  ├─ core/            # security, rate-limit, config, logs, telemetry
+│  │  ├─ routers/         # HTTP + WS endpointleri
+│  │  ├─ services/        # orchestrator, ai, search
+│  │  ├─ features/        # trie, dictionary, context, ranking, vb.
+│  │  └─ models/          # pydantic schema'lar
+│  ├─ scripts/            # batch learn, frequency builder, setup
+│  ├─ tests/              # pytest + load test
+│  ├─ Dockerfile
+│  └─ requirements.txt
+├─ k8s/                   # backend deployment/service/config ornekleri
+├─ docker-compose.yml
+└─ BASLAT_ULTIMATE.bat
+```
+
+---
+
+## API Ozeti
+
+`main.py` router'lari hem prefixsiz hem de `/api/v1` altinda yayinlar (geriye donuk uyumluluk).
+
+### Prediction
+
+- `POST /predict`
+- `POST /process` (legacy alias)
+- `POST /correct`
+- `POST /autocorrect/undo`
+
+### Learning
+
+- `POST /learn`
+
+### System
+
+- `GET /api/v1/health`
+- `GET /api/v1/metrics`
+- `POST /api/v1/index_words`
+
+### WebSocket
+
+- `WS /ws`
+- `WS /api/v1/ws`
+
+### Ornek Request
+
 ```json
 {
   "text": "merhaba s",
   "context_message": "customer_support_chat_v1",
-  "max_suggestions": 5,
+  "max_suggestions": 10,
   "use_ai": true,
-  "use_search": true
+  "use_search": true,
+  "user_id": "demo-user"
 }
 ```
 
-**Response:**
+### Ornek Response
+
 ```json
 {
   "suggestions": [
@@ -168,41 +147,171 @@ The main entry point for the suggestion engine.
       "text": "size",
       "type": "dictionary",
       "score": 98.5,
+      "description": "Sozluk onerisi",
       "source": "trie_index"
-    },
-    {
-      "text": "selam",
-      "type": "smart_completion",
-      "score": 95.0,
-      "source": "context_ai"
     }
   ],
+  "corrected_text": null,
   "processing_time_ms": 12.4,
-  "sources_used": ["trie_index", "context_ai"]
+  "sources_used": ["trie_index", "local_dictionary"]
 }
 ```
 
 ---
 
-## 📊 Performance & Reliability
+## Guvenlik ve Dayaniklilik
 
-*   **Uptime:** Self-healing architecture restarts customized services upon failure.
-*   **Latency:** Optimized Trie structures deliver P99 latency of **4ms** for common prefixes.
-*   **Safety:** Strict type normalization prevents `500 Internal Server Errors` on malformed data.
-*   **Scalability:** Stateless backend logic allows for infinite horizontal scaling behind a load balancer.
-
----
-
-## 🗺 Roadmap to 3.0
-
-- [x] **v2.1:** Microservices Refactor & Directory Restructuring
-- [x] **v2.2:** Advanced Context Engine & Intent Detection
-- [x] **v2.3:** Robust Error Handling & Type Safety (Crash Proofing)
-- [ ] **v3.0:** Federated Learning & Multi-Tenant Support
-- [ ] **v3.1:** GraphQL API Interface
+- **API Key Middleware:** `X-API-Key` header kontrolu; localhost/dev icin bypass kurallari mevcut.
+- **CORS:** `ALLOWED_ORIGINS` env ayariyla yonetilir.
+- **Rate Limit:**
+  - Global middleware (`core/rate_limit.py`) Redis varsa Redis, yoksa memory.
+  - Router/WS seviyesinde ek local limitler.
+- **Input Validation:** SQL/XSS benzeri pattern kontrolleri (`features/security.py`).
+- **Graceful Degradation:** dis servisler yoksa local fallback akisina iner.
 
 ---
 
-**TextHelper Ultimate** — *Where Speed Meets Intelligence.*
+## Hizli Baslangic
 
-Copyright © 2026 TextHelper Inc. All Rights Reserved.
+## 1) Lokal (Python)
+
+```bash
+cd python_backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+```
+
+Tarayici:
+- App: `http://localhost:8080`
+- Swagger: `http://localhost:8080/docs`
+
+## 2) Tek Komut Baslatma (Windows)
+
+Kok dizinde:
+
+```bat
+BASLAT_ULTIMATE.bat
+```
+
+Script, Docker aciksa `backend + elasticsearch + redis` servislerini kaldirir; degilse lite moda duser.
+
+## 3) Docker Compose
+
+Kok dizinde:
+
+```bash
+docker-compose up -d --build
+```
+
+Varsayilan servisler:
+- `backend` : `8080`
+- `elasticsearch` : `9200`
+- `redis` : `6379`
+
+---
+
+## Ortam Degiskenleri
+
+Temel degiskenler (`python_backend/app/core/config.py`):
+
+- `ENV`: `dev | staging | prod`
+- `LOG_LEVEL`: `INFO`, `DEBUG`, vb.
+- `API_KEY`: API key middleware icin gizli anahtar
+- `ALLOWED_ORIGINS`: CORS origin listesi (`*` veya virgulle ayri liste)
+- `USE_TRANSFORMER`: transformer tahminini ac/kapat
+- `USE_ELASTICSEARCH`: Elasticsearch kullanimini ac/kapat
+- `ENABLE_HEAVY_FEATURES`: ek agir feature'lari ac/kapat
+- `ELASTICSEARCH_HOST`: ES adresi (ornek: `http://localhost:9200`)
+- `REDIS_HOST`, `REDIS_PORT`: Redis baglantisi
+
+Not: Bircok feature bayrak kapali oldugunda sistem hafif modda calisir ve sozluk/trie agirlikli sonuclar uretir.
+
+---
+
+## Sozluk ve Ogrenme Pipeline'i
+
+### Buyuk dictionary olusturma
+
+```bash
+cd python_backend
+python -m app.features.generate_large_dictionary
+```
+
+### Batch ogrenme (metin dosyasindan)
+
+```bash
+cd python_backend
+python -m scripts.batch_learn path/to/texts.txt --user-id my-domain
+```
+
+Her satir bir mesaj olacak sekilde `/api/v1/learn` endpointine feed eder.
+
+### Corpus'tan frekans olusturma
+
+```bash
+cd python_backend
+python -m scripts.build_frequencies path/to/corpus1.txt path/to/corpus2.txt
+```
+
+Bu komut `data/tr_frequencies.json` dosyasini olusturur/gunceller.
+
+---
+
+## Kubernetes (Ornek)
+
+`k8s/` altindaki dosyalar backend dagitimi icin referans olarak bulunur:
+
+- `backend-deployment.yaml`
+- `backend-service.yaml`
+- `configmap.yaml`
+- `secret-example.yaml`
+
+`backend-deployment.yaml` icinde readiness/liveness probe olarak `/api/v1/health` kullanilir.
+
+---
+
+## Test ve CI
+
+- Unit/API testleri: `python_backend/tests/test_api.py`
+- Yuk testi: `python_backend/tests/load_test.py` (Locust)
+- CI: `.github/workflows/backend-ci.yml`
+  - Python 3.11
+  - `pip install -r requirements.txt`
+  - `pytest`
+
+Lokal test:
+
+```bash
+cd python_backend
+pytest
+```
+
+---
+
+## Teknoloji Yigini
+
+| Katman | Teknoloji |
+|---|---|
+| Backend | FastAPI, Uvicorn |
+| Modelleme | Pydantic |
+| AI (opsiyonel) | Transformers, Torch |
+| Arama | Elasticsearch (opsiyonel) + local dictionary |
+| Cache / Rate limit | Redis (opsiyonel) + memory fallback |
+| Paketler | symspellpy, zeyrek, requests, orjson |
+| Dagitim | Docker Compose, Kubernetes (ornek) |
+
+---
+
+## Bilinen Notlar
+
+- Performans degerleri ortama, feature flag'lere ve veri setine gore degisir.
+- AI/ES/Redis olmayan ortamlarda sistem fallback modunda yine calisir.
+- `API_KEY` degerini production ortaminda mutlaka degistirin.
+
+---
+
+## Lisans ve Katki
+
+Proje sahibi ve lisans detaylari icin depo ayarlarinizi kullanin. Kurumsal katkilar icin PR + CI yesil kuralini uygulamaniz onerilir.
